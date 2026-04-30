@@ -5,7 +5,8 @@ using UnityEngine.UI;
 
 namespace TableLaughs
 {
-    public sealed class HandwritingPaperInput : MonoBehaviour, IPointerDownHandler, IDragHandler, IPointerUpHandler
+    public sealed class HandwritingPaperInput : MonoBehaviour, IPointerDownHandler, IDragHandler, IPointerUpHandler,
+        IInitializePotentialDragHandler
     {
         private const float MinPointDistance = 4f;
         private const int InactivePointerId = int.MinValue;
@@ -93,6 +94,11 @@ namespace TableLaughs
             lastLocalPoint = localPoint;
             NotifyChanged();
             eventData.Use();
+        }
+
+        public void OnInitializePotentialDrag(PointerEventData eventData)
+        {
+            eventData.useDragThreshold = false;
         }
 
         public void OnDrag(PointerEventData eventData)
