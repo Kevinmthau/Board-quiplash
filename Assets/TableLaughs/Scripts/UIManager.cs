@@ -1,0 +1,1064 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
+
+namespace TableLaughs
+{
+    public sealed class UIManager : MonoBehaviour
+    {
+        private static readonly Vector2[] SeatPositions =
+        {
+            new Vector2(-560f, -430f),
+            new Vector2(560f, -430f),
+            new Vector2(825f, -250f),
+            new Vector2(825f, 250f),
+            new Vector2(560f, 430f),
+            new Vector2(-560f, 430f),
+            new Vector2(-825f, 250f),
+            new Vector2(-825f, -250f)
+        };
+
+        private static readonly float[] SeatRotations = { 0f, 0f, 90f, 90f, 180f, 180f, -90f, -90f };
+
+        private readonly Color backgroundColor = new Color(0.055f, 0.075f, 0.095f);
+        private readonly Color panelColor = new Color(0.12f, 0.15f, 0.18f, 0.96f);
+        private readonly Color softPanelColor = new Color(0.18f, 0.22f, 0.26f, 0.96f);
+        private readonly Color textColor = new Color(0.94f, 0.96f, 0.95f);
+        private readonly Color mutedTextColor = new Color(0.68f, 0.73f, 0.75f);
+        private readonly Color accentColor = new Color(0.98f, 0.78f, 0.22f);
+        private readonly Color secondAccentColor = new Color(0.24f, 0.78f, 0.88f);
+
+        private Canvas canvas;
+        private RectTransform canvasRect;
+        private GameObject currentScreen;
+        private GameObject keyboardOverlay;
+        private Text timerText;
+        private Font defaultFont;
+        private BoardInputBridge boardInputBridge;
+        private SoundHooks soundHooks;
+
+        public void Initialize(BoardInputBridge inputBridge, SoundHooks hooks)
+        {
+            boardInputBridge = inputBridge;
+            soundHooks = hooks;
+            EnsureCamera();
+            EnsureCanvas();
+            EnsureEventSystem();
+        }
+
+        public void ShowTitleScreen(Action onStart)
+        {
+            var screen = CreateScreen("Title Screen");
+
+            CreateText(screen.transform, "Table Laughs", 86, accentColor, TextAnchor.MiddleCenter, FontStyle.Bold,
+                new Vector2(0f, 120f), new Vector2(1100f, 130f));
+            CreateText(screen.transform, "A tabletop comedy prompt game for 3-8 players", 34, textColor,
+                TextAnchor.MiddleCenter, FontStyle.Normal, new Vector2(0f, 40f), new Vector2(1100f, 70f));
+
+            CreateButton(screen.transform, "Start", () =>
+            {
+                soundHooks?.Play(SfxCue.Tap);
+                onStart?.Invoke();
+            }, accentColor, new Vector2(0f, -90f), new Vector2(340f, 100f), 34);
+
+            CreateText(screen.transform, "No phones. No accounts. Just tap in around the table.", 26, mutedTextColor,
+                TextAnchor.MiddleCenter, FontStyle.Normal, new Vector2(0f, -210f), new Vector2(1100f, 60f));
+        }
+
+        public void ShowJoinScreen(
+            IReadOnlyList<PlayerData> players,
+            Func<int, PlayerData> onSeatTapped,
+            Action<PlayerData, string> onNameChanged,
+            Action<PlayerData> onColorCycle,
+            Action<PlayerData> onLeave,
+            Action onStart)
+        {
+            var screen = CreateScreen("Join Screen");
+
+            CreateText(screen.transform, "Tap a seat to join", 54, accentColor, TextAnchor.MiddleCenter,
+                FontStyle.Bold, new Vector2(0f, 120f), new Vector2(900f, 80f));
+
+            var readyText = players.Count >= PlayerManager.MinPlayers
+                ? "Ready when the table is"
+                : $"{PlayerManager.MinPlayers - players.Count} more player(s) needed";
+            CreateText(screen.transform, readyText, 30, textColor, TextAnchor.MiddleCenter, FontStyle.Normal,
+                new Vector2(0f, 55f), new Vector2(900f, 60f));
+
+            var startButton = CreateButton(screen.transform, "Begin Game", () =>
+            {
+                soundHooks?.Play(SfxCue.Tap);
+                onStart?.Invoke();
+            }, secondAccentColor, new Vector2(0f, -65f), new Vector2(360f, 92f), 30);
+            startButton.Button.interactable = players.Count >= PlayerManager.MinPlayers;
+
+            CreateText(screen.transform, $"{players.Count}/{PlayerManager.MaxPlayers}", 34, mutedTextColor,
+                TextAnchor.MiddleCenter, FontStyle.Bold, new Vector2(0f, -160f), new Vector2(300f, 60f));
+
+            for (var seatIndex = 0; seatIndex < PlayerManager.MaxPlayers; seatIndex++)
+            {
+                var player = players.FirstOrDefault(candidate => candidate.SeatIndex == seatIndex);
+                CreateJoinSeat(screen.transform, seatIndex, player, onSeatTapped, onNameChanged, onColorCycle, onLeave);
+            }
+        }
+
+        public void ShowPromptEntry(
+            int roundNumber,
+            IReadOnlyList<PlayerData> players,
+            IReadOnlyList<AnswerSlot> answerSlots,
+            float timeLimit,
+            Action<AnswerSlot, string> onSubmit,
+            Func<string> randomAnswerProvider)
+        {
+            var screen = CreateScreen("Prompt Entry");
+            CreateRoundHeader(screen.transform, $"Round {roundNumber}", "Write your answer", timeLimit);
+
+            foreach (var player in players)
+            {
+                var playerSlots = answerSlots.Where(slot => slot.Player.Id == player.Id).ToList();
+                if (playerSlots.Count == 0)
+                {
+                    continue;
+                }
+
+                CreatePromptSeatPanel(screen.transform, player, playerSlots, onSubmit, randomAnswerProvider);
+            }
+        }
+
+        public void ShowFinalPromptEntry(
+            IReadOnlyList<PlayerData> players,
+            IReadOnlyList<FinalAnswer> finalAnswers,
+            float timeLimit,
+            Action<FinalAnswer, string> onSubmit,
+            Func<string> randomAnswerProvider)
+        {
+            var screen = CreateScreen("Final Prompt Entry");
+            CreateRoundHeader(screen.transform, "Final Round", "Everyone answers the same prompt", timeLimit);
+
+            foreach (var player in players)
+            {
+                var finalAnswer = finalAnswers.First(answer => answer.Player.Id == player.Id);
+                CreateFinalPromptSeatPanel(screen.transform, player, finalAnswer, onSubmit, randomAnswerProvider);
+            }
+        }
+
+        public void ShowHeadToHeadVoting(
+            int roundNumber,
+            Matchup matchup,
+            IReadOnlyList<PlayerData> players,
+            float timeLimit,
+            Func<PlayerData, int, bool> onVote)
+        {
+            var screen = CreateScreen("Head To Head Vote");
+            CreateRoundHeader(screen.transform, $"Round {roundNumber}", "Pick the answer that lands best", timeLimit);
+
+            CreateText(screen.transform, matchup.Prompt.text, 38, textColor, TextAnchor.MiddleCenter, FontStyle.Bold,
+                new Vector2(0f, 250f), new Vector2(1180f, 110f));
+
+            var cardA = CreateAnswerCard(screen.transform, "A", matchup.AnswerA, matchup.PlayerA.Color,
+                new Vector2(-360f, 35f), new Vector2(590f, 270f));
+            var cardB = CreateAnswerCard(screen.transform, "B", matchup.AnswerB, matchup.PlayerB.Color,
+                new Vector2(360f, 35f), new Vector2(590f, 270f));
+            if (Application.isPlaying)
+            {
+                StartCoroutine(AnimatePop(cardA.transform as RectTransform, 0.05f));
+                StartCoroutine(AnimatePop(cardB.transform as RectTransform, 0.20f));
+            }
+            soundHooks?.Play(SfxCue.Reveal);
+
+            foreach (var player in players)
+            {
+                CreateHeadToHeadVotePanel(screen.transform, player, matchup, onVote);
+            }
+        }
+
+        public void ShowFinalVoting(
+            IReadOnlyList<PlayerData> players,
+            IReadOnlyList<FinalAnswer> finalAnswers,
+            float timeLimit,
+            Func<PlayerData, int, bool> onVote)
+        {
+            var screen = CreateScreen("Final Vote");
+            CreateRoundHeader(screen.transform, "Final Vote", "Choose a favorite that is not your own", timeLimit);
+
+            CreateText(screen.transform, finalAnswers[0].Prompt.text, 36, textColor, TextAnchor.MiddleCenter,
+                FontStyle.Bold, new Vector2(0f, 270f), new Vector2(1240f, 90f));
+
+            var answerGrid = CreatePanel(screen.transform, "Final Answer Grid", new Vector2(0f, 10f),
+                new Vector2(1280f, 480f), new Color(0f, 0f, 0f, 0f), 0f);
+            var grid = answerGrid.AddComponent<GridLayoutGroup>();
+            grid.cellSize = new Vector2(300f, 140f);
+            grid.spacing = new Vector2(18f, 18f);
+            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            grid.constraintCount = 4;
+            grid.childAlignment = TextAnchor.MiddleCenter;
+
+            for (var i = 0; i < finalAnswers.Count; i++)
+            {
+                var answer = finalAnswers[i];
+                var card = CreateLayoutPanel(answerGrid.transform, $"Final Answer {i + 1}",
+                    Color.Lerp(answer.Player.Color, Color.black, 0.18f));
+                CreateText(card.transform, $"{i + 1}. {answer.Answer}", 25, Color.white, TextAnchor.MiddleCenter,
+                    FontStyle.Bold, Vector2.zero, new Vector2(280f, 122f));
+            }
+
+            foreach (var player in players)
+            {
+                CreateFinalVotePanel(screen.transform, player, finalAnswers, onVote);
+            }
+
+            soundHooks?.Play(SfxCue.Reveal);
+        }
+
+        public void ShowHeadToHeadResult(Matchup matchup)
+        {
+            var screen = CreateScreen("Head To Head Result");
+            CreateText(screen.transform, matchup.Prompt.text, 38, textColor, TextAnchor.MiddleCenter, FontStyle.Bold,
+                new Vector2(0f, 280f), new Vector2(1180f, 110f));
+
+            var aWon = matchup.VotesA >= matchup.VotesB;
+            var bWon = matchup.VotesB >= matchup.VotesA;
+            CreateResultCard(screen.transform, matchup.PlayerA, matchup.AnswerA, matchup.VotesA, aWon,
+                new Vector2(-360f, 20f));
+            CreateResultCard(screen.transform, matchup.PlayerB, matchup.AnswerB, matchup.VotesB, bWon,
+                new Vector2(360f, 20f));
+
+            var resultLine = matchup.VotesA == matchup.VotesB
+                ? "The table calls it a tie"
+                : $"{(matchup.VotesA > matchup.VotesB ? matchup.PlayerA.DisplayName : matchup.PlayerB.DisplayName)} takes it";
+            CreateText(screen.transform, resultLine, 46, accentColor, TextAnchor.MiddleCenter, FontStyle.Bold,
+                new Vector2(0f, -270f), new Vector2(1100f, 80f));
+            soundHooks?.Play(SfxCue.Score);
+        }
+
+        public void ShowFinalResult(IReadOnlyList<FinalAnswer> finalAnswers)
+        {
+            var screen = CreateScreen("Final Result");
+            CreateText(screen.transform, "Final votes", 52, accentColor, TextAnchor.MiddleCenter, FontStyle.Bold,
+                new Vector2(0f, 310f), new Vector2(800f, 80f));
+
+            var sorted = finalAnswers.OrderByDescending(answer => answer.Votes).ToList();
+            for (var i = 0; i < sorted.Count; i++)
+            {
+                var answer = sorted[i];
+                var row = CreatePanel(screen.transform, $"Final Result {i}", new Vector2(0f, 210f - i * 78f),
+                    new Vector2(1120f, 64f), Color.Lerp(answer.Player.Color, Color.black, 0.35f), 0f);
+                CreateText(row.transform, $"{answer.Player.DisplayName}: {answer.Answer}", 25, Color.white,
+                    TextAnchor.MiddleLeft, FontStyle.Bold, new Vector2(-165f, 0f), new Vector2(760f, 54f));
+                CreateText(row.transform, $"{answer.Votes} vote(s)", 25, Color.white, TextAnchor.MiddleRight,
+                    FontStyle.Bold, new Vector2(420f, 0f), new Vector2(230f, 54f));
+            }
+
+            soundHooks?.Play(SfxCue.Score);
+        }
+
+        public void ShowScoreboard(
+            int roundNumber,
+            IReadOnlyList<PlayerData> leaderboard,
+            RoundScoreSummary scoreSummary,
+            Action onContinue)
+        {
+            var screen = CreateScreen("Scoreboard");
+            CreateText(screen.transform, $"Scores after round {roundNumber}", 52, accentColor,
+                TextAnchor.MiddleCenter, FontStyle.Bold, new Vector2(0f, 315f), new Vector2(1000f, 80f));
+
+            for (var i = 0; i < leaderboard.Count; i++)
+            {
+                var player = leaderboard[i];
+                var row = CreatePanel(screen.transform, $"Leaderboard {i}", new Vector2(0f, 220f - i * 72f),
+                    new Vector2(980f, 58f), Color.Lerp(player.Color, Color.black, 0.30f), 0f);
+                CreateText(row.transform, $"{i + 1}. {player.DisplayName}", 26, Color.white, TextAnchor.MiddleLeft,
+                    FontStyle.Bold, new Vector2(-220f, 0f), new Vector2(470f, 52f));
+                CreateText(row.transform, player.Score.ToString(), 28, Color.white, TextAnchor.MiddleRight,
+                    FontStyle.Bold, new Vector2(340f, 0f), new Vector2(220f, 52f));
+            }
+
+            var summaryText = scoreSummary.Lines.Count == 0
+                ? "No points this time. The table remains mysterious."
+                : string.Join("   |   ", scoreSummary.Lines.Take(3));
+            CreateText(screen.transform, summaryText, 23, mutedTextColor, TextAnchor.MiddleCenter, FontStyle.Normal,
+                new Vector2(0f, -315f), new Vector2(1450f, 56f));
+
+            CreateButton(screen.transform, "Next Round", () =>
+            {
+                soundHooks?.Play(SfxCue.Tap);
+                onContinue?.Invoke();
+            }, secondAccentColor, new Vector2(0f, -230f), new Vector2(300f, 80f), 28);
+        }
+
+        public void ShowWinnerScreen(IReadOnlyList<PlayerData> leaderboard, Action onPlayAgain)
+        {
+            var screen = CreateScreen("Winner Screen");
+            var winner = leaderboard[0];
+
+            CreateText(screen.transform, "Table Laughs Champion", 58, accentColor, TextAnchor.MiddleCenter,
+                FontStyle.Bold, new Vector2(0f, 295f), new Vector2(1150f, 85f));
+            CreateText(screen.transform, winner.DisplayName, 76, winner.Color, TextAnchor.MiddleCenter,
+                FontStyle.Bold, new Vector2(0f, 205f), new Vector2(1100f, 95f));
+
+            for (var i = 0; i < leaderboard.Count; i++)
+            {
+                var player = leaderboard[i];
+                var row = CreatePanel(screen.transform, $"Winner Row {i}", new Vector2(0f, 105f - i * 58f),
+                    new Vector2(900f, 48f), Color.Lerp(player.Color, Color.black, 0.34f), 0f);
+                CreateText(row.transform, $"{i + 1}. {player.DisplayName}", 23, Color.white, TextAnchor.MiddleLeft,
+                    FontStyle.Bold, new Vector2(-190f, 0f), new Vector2(430f, 44f));
+                CreateText(row.transform, player.Score.ToString(), 24, Color.white, TextAnchor.MiddleRight,
+                    FontStyle.Bold, new Vector2(300f, 0f), new Vector2(190f, 44f));
+            }
+
+            CreateButton(screen.transform, "Play Again", () =>
+            {
+                soundHooks?.Play(SfxCue.Tap);
+                onPlayAgain?.Invoke();
+            }, accentColor, new Vector2(0f, -330f), new Vector2(320f, 86f), 30);
+
+            if (Application.isPlaying)
+            {
+                StartCoroutine(ConfettiBurst(screen.transform));
+            }
+            soundHooks?.Play(SfxCue.Win);
+        }
+
+        public void SetTimer(float secondsRemaining)
+        {
+            if (timerText != null)
+            {
+                timerText.text = Mathf.CeilToInt(Mathf.Max(0f, secondsRemaining)).ToString();
+            }
+        }
+
+        private void CreateJoinSeat(
+            Transform parent,
+            int seatIndex,
+            PlayerData player,
+            Func<int, PlayerData> onSeatTapped,
+            Action<PlayerData, string> onNameChanged,
+            Action<PlayerData> onColorCycle,
+            Action<PlayerData> onLeave)
+        {
+            var color = player == null ? softPanelColor : Color.Lerp(player.Color, Color.black, 0.22f);
+            var panel = CreateSeatPanel(parent, $"Seat {seatIndex + 1}", seatIndex, new Vector2(390f, 172f), color);
+
+            if (player == null)
+            {
+                CreateText(panel.transform, "Tap to join", 27, textColor, TextAnchor.MiddleCenter, FontStyle.Bold,
+                    Vector2.zero, new Vector2(340f, 80f));
+                var joinButton = panel.AddComponent<Button>();
+                joinButton.transition = Selectable.Transition.ColorTint;
+                joinButton.onClick.AddListener(() =>
+                {
+                    soundHooks?.Play(SfxCue.Tap);
+                    onSeatTapped?.Invoke(seatIndex);
+                });
+                return;
+            }
+
+            CreateText(panel.transform, $"Seat {seatIndex + 1}", 18, mutedTextColor, TextAnchor.MiddleCenter,
+                FontStyle.Bold, new Vector2(0f, 58f), new Vector2(240f, 28f));
+
+            ButtonBundle nameButton = null;
+            nameButton = CreateButton(panel.transform, player.DisplayName, () =>
+            {
+                ShowKeyboard("Name", player.DisplayName, 16, SeatRotations[seatIndex], value =>
+                {
+                    onNameChanged?.Invoke(player, value);
+                    nameButton.Label.text = string.IsNullOrWhiteSpace(value) ? $"Player {player.Id}" : value;
+                });
+            }, Color.Lerp(player.Color, Color.white, 0.18f), new Vector2(0f, 14f), new Vector2(310f, 54f), 20);
+
+            CreateButton(panel.transform, "Color", () =>
+            {
+                soundHooks?.Play(SfxCue.Tap);
+                onColorCycle?.Invoke(player);
+            }, secondAccentColor, new Vector2(-78f, -48f), new Vector2(142f, 44f), 18);
+
+            CreateButton(panel.transform, "Leave", () =>
+            {
+                soundHooks?.Play(SfxCue.Tap);
+                onLeave?.Invoke(player);
+            }, new Color(0.84f, 0.22f, 0.26f), new Vector2(78f, -48f), new Vector2(142f, 44f), 18);
+        }
+
+        private void CreatePromptSeatPanel(
+            Transform parent,
+            PlayerData player,
+            List<AnswerSlot> slots,
+            Action<AnswerSlot, string> onSubmit,
+            Func<string> randomAnswerProvider)
+        {
+            var panel = CreateSeatPanel(parent, $"Prompt Panel {player.Id}", player.SeatIndex,
+                new Vector2(430f, 245f), Color.Lerp(player.Color, Color.black, 0.30f));
+            var state = new PromptPanelState
+            {
+                Player = player,
+                Slots = slots,
+                CurrentIndex = NextOpenIndex(slots)
+            };
+
+            CreateText(panel.transform, player.DisplayName, 20, Color.white, TextAnchor.MiddleCenter,
+                FontStyle.Bold, new Vector2(0f, 99f), new Vector2(360f, 30f));
+            state.ProgressLabel = CreateText(panel.transform, string.Empty, 17, mutedTextColor,
+                TextAnchor.MiddleCenter, FontStyle.Bold, new Vector2(0f, 72f), new Vector2(360f, 26f));
+            state.PromptLabel = CreateText(panel.transform, string.Empty, 20, Color.white,
+                TextAnchor.MiddleCenter, FontStyle.Bold, new Vector2(0f, 24f), new Vector2(370f, 76f));
+
+            var answerButton = CreateButton(panel.transform, "Type answer", () =>
+            {
+                var activeSlot = state.ActiveSlot;
+                if (activeSlot == null)
+                {
+                    return;
+                }
+
+                ShowKeyboard("Answer", state.Draft, 72, SeatRotations[player.SeatIndex], value =>
+                {
+                    state.Draft = value;
+                    state.AnswerLabel.text = string.IsNullOrWhiteSpace(value) ? "Tap to type" : value;
+                    state.SubmitButton.interactable = true;
+                });
+            }, Color.Lerp(panelColor, Color.white, 0.12f), new Vector2(0f, -45f), new Vector2(360f, 54f), 18);
+            state.AnswerLabel = answerButton.Label;
+
+            CreateButton(panel.transform, "Random", () =>
+            {
+                state.Draft = randomAnswerProvider();
+                state.AnswerLabel.text = state.Draft;
+                state.SubmitButton.interactable = true;
+                soundHooks?.Play(SfxCue.Tap);
+            }, secondAccentColor, new Vector2(-93f, -99f), new Vector2(170f, 42f), 17);
+
+            var submitButton = CreateButton(panel.transform, "Submit", () =>
+            {
+                var activeSlot = state.ActiveSlot;
+                if (activeSlot == null)
+                {
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(state.Draft))
+                {
+                    state.Draft = randomAnswerProvider();
+                }
+
+                onSubmit?.Invoke(activeSlot, state.Draft);
+                state.CurrentIndex = NextOpenIndex(slots);
+                state.Draft = string.Empty;
+                RefreshPromptState(state);
+                soundHooks?.Play(SfxCue.Tap);
+            }, accentColor, new Vector2(93f, -99f), new Vector2(170f, 42f), 17);
+            state.SubmitButton = submitButton.Button;
+
+            RefreshPromptState(state);
+        }
+
+        private void CreateFinalPromptSeatPanel(
+            Transform parent,
+            PlayerData player,
+            FinalAnswer finalAnswer,
+            Action<FinalAnswer, string> onSubmit,
+            Func<string> randomAnswerProvider)
+        {
+            var panel = CreateSeatPanel(parent, $"Final Prompt Panel {player.Id}", player.SeatIndex,
+                new Vector2(430f, 245f), Color.Lerp(player.Color, Color.black, 0.30f));
+
+            var draft = string.Empty;
+            CreateText(panel.transform, player.DisplayName, 20, Color.white, TextAnchor.MiddleCenter,
+                FontStyle.Bold, new Vector2(0f, 99f), new Vector2(360f, 30f));
+            CreateText(panel.transform, finalAnswer.Prompt.text, 20, Color.white, TextAnchor.MiddleCenter,
+                FontStyle.Bold, new Vector2(0f, 34f), new Vector2(370f, 100f));
+
+            Text answerLabel = null;
+            Button submitButton = null;
+            var answerButton = CreateButton(panel.transform, "Tap to type", () =>
+            {
+                if (finalAnswer.Submitted)
+                {
+                    return;
+                }
+
+                ShowKeyboard("Final answer", draft, 72, SeatRotations[player.SeatIndex], value =>
+                {
+                    draft = value;
+                    answerLabel.text = string.IsNullOrWhiteSpace(value) ? "Tap to type" : value;
+                    submitButton.interactable = true;
+                });
+            }, Color.Lerp(panelColor, Color.white, 0.12f), new Vector2(0f, -44f), new Vector2(360f, 54f), 18);
+            answerLabel = answerButton.Label;
+
+            CreateButton(panel.transform, "Random", () =>
+            {
+                draft = randomAnswerProvider();
+                answerLabel.text = draft;
+                submitButton.interactable = true;
+                soundHooks?.Play(SfxCue.Tap);
+            }, secondAccentColor, new Vector2(-93f, -99f), new Vector2(170f, 42f), 17);
+
+            var submit = CreateButton(panel.transform, "Submit", () =>
+            {
+                if (finalAnswer.Submitted)
+                {
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(draft))
+                {
+                    draft = randomAnswerProvider();
+                }
+
+                onSubmit?.Invoke(finalAnswer, draft);
+                answerLabel.text = "Ready";
+                submitButton.interactable = false;
+                soundHooks?.Play(SfxCue.Tap);
+            }, accentColor, new Vector2(93f, -99f), new Vector2(170f, 42f), 17);
+            submitButton = submit.Button;
+        }
+
+        private void CreateHeadToHeadVotePanel(
+            Transform parent,
+            PlayerData player,
+            Matchup matchup,
+            Func<PlayerData, int, bool> onVote)
+        {
+            var panel = CreateSeatPanel(parent, $"Vote Panel {player.Id}", player.SeatIndex,
+                new Vector2(390f, 165f), Color.Lerp(player.Color, Color.black, 0.35f));
+            CreateText(panel.transform, player.DisplayName, 20, Color.white, TextAnchor.MiddleCenter,
+                FontStyle.Bold, new Vector2(0f, 55f), new Vector2(330f, 34f));
+
+            var status = CreateText(panel.transform, matchup.HasSubmitter(player.Id) ? "Your answer is up" : "Vote",
+                19, mutedTextColor, TextAnchor.MiddleCenter, FontStyle.Bold, new Vector2(0f, 18f),
+                new Vector2(330f, 30f));
+
+            if (matchup.HasSubmitter(player.Id))
+            {
+                return;
+            }
+
+            ButtonBundle voteA = null;
+            ButtonBundle voteB = null;
+
+            voteA = CreateButton(panel.transform, "A", () =>
+            {
+                if (onVote(player, 0))
+                {
+                    status.text = "Voted";
+                    voteA.Button.interactable = false;
+                    voteB.Button.interactable = false;
+                    soundHooks?.Play(SfxCue.Vote);
+                }
+            }, accentColor, new Vector2(-78f, -42f), new Vector2(135f, 54f), 24);
+
+            voteB = CreateButton(panel.transform, "B", () =>
+            {
+                if (onVote(player, 1))
+                {
+                    status.text = "Voted";
+                    voteA.Button.interactable = false;
+                    voteB.Button.interactable = false;
+                    soundHooks?.Play(SfxCue.Vote);
+                }
+            }, secondAccentColor, new Vector2(78f, -42f), new Vector2(135f, 54f), 24);
+        }
+
+        private void CreateFinalVotePanel(
+            Transform parent,
+            PlayerData player,
+            IReadOnlyList<FinalAnswer> finalAnswers,
+            Func<PlayerData, int, bool> onVote)
+        {
+            var panel = CreateSeatPanel(parent, $"Final Vote Panel {player.Id}", player.SeatIndex,
+                new Vector2(410f, 178f), Color.Lerp(player.Color, Color.black, 0.35f));
+            CreateText(panel.transform, player.DisplayName, 19, Color.white, TextAnchor.MiddleCenter,
+                FontStyle.Bold, new Vector2(0f, 64f), new Vector2(330f, 30f));
+            var status = CreateText(panel.transform, "Vote", 17, mutedTextColor, TextAnchor.MiddleCenter,
+                FontStyle.Bold, new Vector2(0f, 39f), new Vector2(330f, 24f));
+
+            var gridObject = CreatePanel(panel.transform, "Vote Number Grid", new Vector2(0f, -25f),
+                new Vector2(330f, 105f), new Color(0f, 0f, 0f, 0f), 0f);
+            var grid = gridObject.AddComponent<GridLayoutGroup>();
+            grid.cellSize = new Vector2(70f, 42f);
+            grid.spacing = new Vector2(8f, 8f);
+            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            grid.constraintCount = 4;
+            grid.childAlignment = TextAnchor.MiddleCenter;
+
+            var buttons = new List<Button>();
+            for (var i = 0; i < finalAnswers.Count; i++)
+            {
+                var answerIndex = i;
+                var button = CreateLayoutButton(gridObject.transform, (i + 1).ToString(), () =>
+                {
+                    if (onVote(player, answerIndex))
+                    {
+                        status.text = "Voted";
+                        foreach (var choiceButton in buttons)
+                        {
+                            choiceButton.interactable = false;
+                        }
+
+                        soundHooks?.Play(SfxCue.Vote);
+                    }
+                }, finalAnswers[i].Player.Id == player.Id ? mutedTextColor : accentColor, 22);
+                button.Button.interactable = finalAnswers[i].Player.Id != player.Id;
+                buttons.Add(button.Button);
+            }
+        }
+
+        private void RefreshPromptState(PromptPanelState state)
+        {
+            if (state.CurrentIndex >= state.Slots.Count)
+            {
+                state.ProgressLabel.text = "All set";
+                state.PromptLabel.text = "Ready for voting";
+                state.AnswerLabel.text = "Submitted";
+                state.SubmitButton.interactable = false;
+                return;
+            }
+
+            var slot = state.ActiveSlot;
+            state.ProgressLabel.text = state.Slots.Count == 1
+                ? "Prompt"
+                : $"Prompt {state.CurrentIndex + 1}/{state.Slots.Count}";
+            state.PromptLabel.text = slot.Prompt.text;
+            state.AnswerLabel.text = "Tap to type";
+            state.SubmitButton.interactable = true;
+        }
+
+        private static int NextOpenIndex(IReadOnlyList<AnswerSlot> slots)
+        {
+            for (var i = 0; i < slots.Count; i++)
+            {
+                if (!slots[i].Submitted)
+                {
+                    return i;
+                }
+            }
+
+            return slots.Count;
+        }
+
+        private void CreateRoundHeader(Transform parent, string leftText, string centerText, float timeLimit)
+        {
+            CreateText(parent, leftText, 32, accentColor, TextAnchor.MiddleLeft, FontStyle.Bold,
+                new Vector2(-760f, 500f), new Vector2(360f, 54f));
+            CreateText(parent, centerText, 34, textColor, TextAnchor.MiddleCenter, FontStyle.Bold,
+                new Vector2(0f, 500f), new Vector2(800f, 54f));
+
+            var timerPanel = CreatePanel(parent, "Timer", new Vector2(800f, 500f), new Vector2(120f, 64f),
+                Color.Lerp(accentColor, Color.black, 0.20f), 0f);
+            timerText = CreateText(timerPanel.transform, Mathf.CeilToInt(timeLimit).ToString(), 34, Color.black,
+                TextAnchor.MiddleCenter, FontStyle.Bold, Vector2.zero, new Vector2(112f, 58f));
+        }
+
+        private GameObject CreateAnswerCard(
+            Transform parent,
+            string label,
+            string answer,
+            Color playerColor,
+            Vector2 position,
+            Vector2 size)
+        {
+            var card = CreatePanel(parent, $"Answer {label}", position, size, Color.Lerp(playerColor, Color.black, 0.22f), 0f);
+            CreateText(card.transform, label, 30, Color.black, TextAnchor.MiddleCenter, FontStyle.Bold,
+                new Vector2(-245f, 98f), new Vector2(54f, 54f), accentColor);
+            CreateText(card.transform, answer, 34, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold,
+                new Vector2(0f, -8f), new Vector2(size.x - 70f, size.y - 82f));
+            return card;
+        }
+
+        private void CreateResultCard(Transform parent, PlayerData player, string answer, int votes, bool highlighted, Vector2 position)
+        {
+            var color = highlighted ? Color.Lerp(player.Color, accentColor, 0.25f) : Color.Lerp(player.Color, Color.black, 0.30f);
+            var card = CreatePanel(parent, $"Result {player.Id}", position, new Vector2(590f, 270f), color, 0f);
+            CreateText(card.transform, player.DisplayName, 28, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold,
+                new Vector2(0f, 98f), new Vector2(500f, 50f));
+            CreateText(card.transform, answer, 31, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold,
+                new Vector2(0f, 18f), new Vector2(500f, 120f));
+            CreateText(card.transform, $"{votes} vote(s)", 26, highlighted ? Color.black : textColor,
+                TextAnchor.MiddleCenter, FontStyle.Bold, new Vector2(0f, -98f), new Vector2(280f, 52f),
+                highlighted ? accentColor : softPanelColor);
+        }
+
+        private void ShowKeyboard(string title, string initialValue, int maxLength, float rotation, Action<string> onChanged)
+        {
+            if (keyboardOverlay != null)
+            {
+                DestroyUiObject(keyboardOverlay);
+            }
+
+            var value = initialValue ?? string.Empty;
+            keyboardOverlay = new GameObject("Table Laughs Keyboard", typeof(RectTransform), typeof(Image));
+            keyboardOverlay.transform.SetParent(canvas.transform, false);
+            var keyboardRect = keyboardOverlay.GetComponent<RectTransform>();
+            keyboardRect.anchorMin = new Vector2(0.5f, 0.5f);
+            keyboardRect.anchorMax = new Vector2(0.5f, 0.5f);
+            keyboardRect.anchoredPosition = Vector2.zero;
+            keyboardRect.sizeDelta = new Vector2(840f, 500f);
+            keyboardRect.localEulerAngles = new Vector3(0f, 0f, rotation);
+            keyboardOverlay.GetComponent<Image>().color = new Color(0.035f, 0.045f, 0.055f, 0.985f);
+
+            CreateText(keyboardOverlay.transform, title, 28, accentColor, TextAnchor.MiddleCenter, FontStyle.Bold,
+                new Vector2(0f, 214f), new Vector2(720f, 48f));
+            var display = CreateText(keyboardOverlay.transform, string.Empty, 26, Color.white, TextAnchor.MiddleCenter,
+                FontStyle.Bold, new Vector2(0f, 158f), new Vector2(720f, 54f), softPanelColor);
+
+            void UpdateDisplay()
+            {
+                display.text = string.IsNullOrEmpty(value) ? " " : value;
+                onChanged?.Invoke(value);
+            }
+
+            var rows = new[] { "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM" };
+            for (var rowIndex = 0; rowIndex < rows.Length; rowIndex++)
+            {
+                var row = rows[rowIndex];
+                var rowWidth = row.Length * 64f;
+                var startX = -rowWidth * 0.5f + 32f;
+                for (var keyIndex = 0; keyIndex < row.Length; keyIndex++)
+                {
+                    var character = row[keyIndex].ToString();
+                    CreateButton(keyboardOverlay.transform, character, () =>
+                    {
+                        if (value.Length < maxLength)
+                        {
+                            value += character;
+                            UpdateDisplay();
+                        }
+                    }, Color.Lerp(secondAccentColor, Color.white, 0.08f),
+                        new Vector2(startX + keyIndex * 64f, 82f - rowIndex * 64f), new Vector2(56f, 52f), 21);
+                }
+            }
+
+            CreateButton(keyboardOverlay.transform, "Space", () =>
+            {
+                if (value.Length < maxLength)
+                {
+                    value += " ";
+                    UpdateDisplay();
+                }
+            }, softPanelColor, new Vector2(-205f, -145f), new Vector2(210f, 54f), 20);
+
+            CreateButton(keyboardOverlay.transform, "Back", () =>
+            {
+                if (value.Length > 0)
+                {
+                    value = value.Substring(0, value.Length - 1);
+                    UpdateDisplay();
+                }
+            }, softPanelColor, new Vector2(35f, -145f), new Vector2(150f, 54f), 20);
+
+            CreateButton(keyboardOverlay.transform, "Done", () =>
+            {
+                soundHooks?.Play(SfxCue.Tap);
+                DestroyUiObject(keyboardOverlay);
+                keyboardOverlay = null;
+            }, accentColor, new Vector2(245f, -145f), new Vector2(170f, 54f), 20);
+
+            UpdateDisplay();
+        }
+
+        private IEnumerator AnimatePop(RectTransform target, float delay)
+        {
+            if (target == null)
+            {
+                yield break;
+            }
+
+            target.localScale = Vector3.zero;
+            yield return new WaitForSeconds(delay);
+
+            const float duration = 0.18f;
+            var elapsed = 0f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                var t = Mathf.Clamp01(elapsed / duration);
+                var overshoot = Mathf.Sin(t * Mathf.PI) * 0.18f;
+                target.localScale = Vector3.one * (t + overshoot);
+                yield return null;
+            }
+
+            target.localScale = Vector3.one;
+        }
+
+        private IEnumerator ConfettiBurst(Transform parent)
+        {
+            for (var i = 0; i < 72; i++)
+            {
+                var piece = new GameObject("Confetti", typeof(RectTransform), typeof(Image), typeof(ConfettiPiece));
+                piece.transform.SetParent(parent, false);
+                var rect = piece.GetComponent<RectTransform>();
+                rect.anchorMin = new Vector2(0.5f, 0.5f);
+                rect.anchorMax = new Vector2(0.5f, 0.5f);
+                rect.anchoredPosition = new Vector2(UnityEngine.Random.Range(-120f, 120f), UnityEngine.Random.Range(0f, 90f));
+                rect.sizeDelta = new Vector2(UnityEngine.Random.Range(10f, 22f), UnityEngine.Random.Range(10f, 22f));
+                piece.GetComponent<Image>().color = Color.HSVToRGB(UnityEngine.Random.value, 0.72f, 1f);
+                piece.GetComponent<ConfettiPiece>().Initialize(new Vector2(
+                    UnityEngine.Random.Range(-460f, 460f),
+                    UnityEngine.Random.Range(180f, 620f)));
+                yield return new WaitForSeconds(0.008f);
+            }
+        }
+
+        private GameObject CreateScreen(string name)
+        {
+            if (currentScreen != null)
+            {
+                DestroyUiObject(currentScreen);
+            }
+
+            if (keyboardOverlay != null)
+            {
+                DestroyUiObject(keyboardOverlay);
+                keyboardOverlay = null;
+            }
+
+            timerText = null;
+            currentScreen = new GameObject(name, typeof(RectTransform), typeof(Image));
+            currentScreen.transform.SetParent(canvas.transform, false);
+            var rect = currentScreen.GetComponent<RectTransform>();
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+            currentScreen.GetComponent<Image>().color = backgroundColor;
+            return currentScreen;
+        }
+
+        private GameObject CreateSeatPanel(Transform parent, string name, int seatIndex, Vector2 size, Color color)
+        {
+            var panel = CreatePanel(parent, name, SeatPositions[seatIndex], size, color, SeatRotations[seatIndex]);
+            return panel;
+        }
+
+        private GameObject CreatePanel(Transform parent, string name, Vector2 position, Vector2 size, Color color, float rotation)
+        {
+            var panel = new GameObject(name, typeof(RectTransform), typeof(Image));
+            panel.transform.SetParent(parent, false);
+            var rect = panel.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = position;
+            rect.sizeDelta = size;
+            rect.localEulerAngles = new Vector3(0f, 0f, rotation);
+            panel.GetComponent<Image>().color = color;
+            return panel;
+        }
+
+        private GameObject CreateLayoutPanel(Transform parent, string name, Color color)
+        {
+            var panel = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            panel.transform.SetParent(parent, false);
+            panel.GetComponent<Image>().color = color;
+            return panel;
+        }
+
+        private Text CreateText(
+            Transform parent,
+            string value,
+            int fontSize,
+            Color color,
+            TextAnchor alignment,
+            FontStyle style,
+            Vector2 position,
+            Vector2 size,
+            Color? background = null)
+        {
+            var container = new GameObject("Text", typeof(RectTransform));
+            container.transform.SetParent(parent, false);
+            var rect = container.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = position;
+            rect.sizeDelta = size;
+
+            GameObject textObject = container;
+            if (background.HasValue)
+            {
+                var image = container.AddComponent<Image>();
+                image.color = background.Value;
+
+                textObject = new GameObject("Text Label", typeof(RectTransform));
+                textObject.transform.SetParent(container.transform, false);
+                var textRect = textObject.GetComponent<RectTransform>();
+                textRect.anchorMin = Vector2.zero;
+                textRect.anchorMax = Vector2.one;
+                textRect.offsetMin = Vector2.zero;
+                textRect.offsetMax = Vector2.zero;
+            }
+
+            var text = textObject.AddComponent<Text>();
+            text.text = value;
+            text.font = DefaultFont;
+            text.fontSize = fontSize;
+            text.fontStyle = style;
+            text.color = color;
+            text.alignment = alignment;
+            text.horizontalOverflow = HorizontalWrapMode.Wrap;
+            text.verticalOverflow = VerticalWrapMode.Truncate;
+            text.resizeTextForBestFit = true;
+            text.resizeTextMinSize = Mathf.Max(12, fontSize - 10);
+            text.resizeTextMaxSize = fontSize;
+            return text;
+        }
+
+        private ButtonBundle CreateButton(
+            Transform parent,
+            string label,
+            Action onClick,
+            Color color,
+            Vector2 position,
+            Vector2 size,
+            int fontSize)
+        {
+            var buttonObject = new GameObject($"Button {label}", typeof(RectTransform), typeof(Image), typeof(Button));
+            buttonObject.transform.SetParent(parent, false);
+            var rect = buttonObject.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = position;
+            rect.sizeDelta = size;
+
+            var image = buttonObject.GetComponent<Image>();
+            image.color = color;
+
+            var button = buttonObject.GetComponent<Button>();
+            button.targetGraphic = image;
+            button.onClick.AddListener(() => onClick?.Invoke());
+
+            var text = CreateText(buttonObject.transform, label, fontSize, Color.black, TextAnchor.MiddleCenter,
+                FontStyle.Bold, Vector2.zero, new Vector2(size.x - 16f, size.y - 10f));
+
+            return new ButtonBundle(buttonObject, button, text);
+        }
+
+        private ButtonBundle CreateLayoutButton(Transform parent, string label, Action onClick, Color color, int fontSize)
+        {
+            var buttonObject = new GameObject($"Button {label}", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
+            buttonObject.transform.SetParent(parent, false);
+            var image = buttonObject.GetComponent<Image>();
+            image.color = color;
+
+            var button = buttonObject.GetComponent<Button>();
+            button.targetGraphic = image;
+            button.onClick.AddListener(() => onClick?.Invoke());
+
+            var text = CreateText(buttonObject.transform, label, fontSize, Color.black, TextAnchor.MiddleCenter,
+                FontStyle.Bold, Vector2.zero, new Vector2(64f, 38f));
+            return new ButtonBundle(buttonObject, button, text);
+        }
+
+        private void EnsureCamera()
+        {
+            if (Camera.main != null)
+            {
+                return;
+            }
+
+            var cameraObject = new GameObject("Main Camera", typeof(Camera), typeof(AudioListener));
+            cameraObject.tag = "MainCamera";
+            var camera = cameraObject.GetComponent<Camera>();
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = backgroundColor;
+            camera.orthographic = true;
+            camera.orthographicSize = 5f;
+        }
+
+        private void DestroyUiObject(GameObject target)
+        {
+            if (target == null)
+            {
+                return;
+            }
+
+            if (Application.isPlaying)
+            {
+                Destroy(target);
+            }
+            else
+            {
+                DestroyImmediate(target);
+            }
+        }
+
+        private void EnsureCanvas()
+        {
+            canvas = FindAnyObjectByType<Canvas>();
+            if (canvas == null)
+            {
+                var canvasObject = new GameObject("TableLaughsCanvas", typeof(RectTransform), typeof(Canvas),
+                    typeof(CanvasScaler), typeof(GraphicRaycaster));
+                canvas = canvasObject.GetComponent<Canvas>();
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                var scaler = canvasObject.GetComponent<CanvasScaler>();
+                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                scaler.referenceResolution = new Vector2(1920f, 1080f);
+                scaler.matchWidthOrHeight = 0.5f;
+            }
+
+            canvasRect = canvas.GetComponent<RectTransform>();
+        }
+
+        private void EnsureEventSystem()
+        {
+            var eventSystem = FindAnyObjectByType<EventSystem>();
+            if (eventSystem == null)
+            {
+                var eventSystemObject = new GameObject("EventSystem", typeof(EventSystem));
+                eventSystem = eventSystemObject.GetComponent<EventSystem>();
+            }
+
+            boardInputBridge?.EnsureBoardUiInputModule(eventSystem);
+        }
+
+        private Font DefaultFont
+        {
+            get
+            {
+                if (defaultFont != null)
+                {
+                    return defaultFont;
+                }
+
+                defaultFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                if (defaultFont == null)
+                {
+                    defaultFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                }
+
+                return defaultFont;
+            }
+        }
+
+        private sealed class PromptPanelState
+        {
+            public PlayerData Player;
+            public List<AnswerSlot> Slots;
+            public int CurrentIndex;
+            public string Draft = string.Empty;
+            public Text ProgressLabel;
+            public Text PromptLabel;
+            public Text AnswerLabel;
+            public Button SubmitButton;
+
+            public AnswerSlot ActiveSlot => CurrentIndex < Slots.Count ? Slots[CurrentIndex] : null;
+        }
+
+        private sealed class ButtonBundle
+        {
+            public readonly GameObject GameObject;
+            public readonly Button Button;
+            public readonly Text Label;
+
+            public ButtonBundle(GameObject gameObject, Button button, Text label)
+            {
+                GameObject = gameObject;
+                Button = button;
+                Label = label;
+            }
+        }
+    }
+}
