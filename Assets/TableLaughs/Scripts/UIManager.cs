@@ -147,34 +147,48 @@ namespace TableLaughs
             }
         }
 
-        public void ShowHeadToHeadVoting(
+        public void ShowRoundVoting(
             int roundNumber,
-            Matchup matchup,
             IReadOnlyList<PlayerData> players,
+            IReadOnlyList<AnswerSlot> answers,
             float timeLimit,
             Func<PlayerData, int, bool> onVote)
         {
-            var screen = CreateScreen("Head To Head Vote");
-            CreateRoundHeader(screen.transform, $"Round {roundNumber}", "Pick the answer that lands best", timeLimit);
+            var screen = CreateScreen("Round Vote");
+            CreateRoundHeader(screen.transform, $"Round {roundNumber}", "Choose a favorite that is not your own", timeLimit);
 
-            CreateText(screen.transform, matchup.Prompt.text, 38, textColor, TextAnchor.MiddleCenter, FontStyle.Bold,
-                new Vector2(0f, 250f), new Vector2(1180f, 110f));
-
-            var cardA = CreateAnswerCard(screen.transform, "A", matchup.AnswerA, matchup.HandwritingA, matchup.PlayerA.Color,
-                new Vector2(-360f, 35f), new Vector2(590f, 270f));
-            var cardB = CreateAnswerCard(screen.transform, "B", matchup.AnswerB, matchup.HandwritingB, matchup.PlayerB.Color,
-                new Vector2(360f, 35f), new Vector2(590f, 270f));
-            if (Application.isPlaying)
+            if (answers.Count > 0)
             {
-                StartCoroutine(AnimatePop(cardA.transform as RectTransform, 0.05f));
-                StartCoroutine(AnimatePop(cardB.transform as RectTransform, 0.20f));
+                CreateText(screen.transform, answers[0].Prompt.text, 36, textColor, TextAnchor.MiddleCenter,
+                    FontStyle.Bold, new Vector2(0f, 270f), new Vector2(1240f, 90f));
             }
-            soundHooks?.Play(SfxCue.Reveal);
+
+            var answerGrid = CreatePanel(screen.transform, "Round Answer Grid", new Vector2(0f, 10f),
+                new Vector2(1280f, 480f), new Color(0f, 0f, 0f, 0f), 0f);
+            var grid = answerGrid.AddComponent<GridLayoutGroup>();
+            grid.cellSize = new Vector2(300f, 140f);
+            grid.spacing = new Vector2(18f, 18f);
+            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            grid.constraintCount = 4;
+            grid.childAlignment = TextAnchor.MiddleCenter;
+
+            for (var i = 0; i < answers.Count; i++)
+            {
+                var answer = answers[i];
+                var card = CreateLayoutPanel(answerGrid.transform, $"Round Answer {i + 1}",
+                    Color.Lerp(answer.Player.Color, Color.black, 0.18f));
+                CreateText(card.transform, (i + 1).ToString(), 24, Color.black, TextAnchor.MiddleCenter,
+                    FontStyle.Bold, new Vector2(-118f, 42f), new Vector2(40f, 40f), accentColor);
+                CreateAnswerPreview(card.transform, answer.Answer, answer.Handwriting, new Vector2(22f, 0f),
+                    new Vector2(230f, 96f), 7f);
+            }
 
             foreach (var player in players)
             {
-                CreateHeadToHeadVotePanel(screen.transform, player, matchup, onVote);
+                CreateRoundVotePanel(screen.transform, player, answers, onVote);
             }
+
+            soundHooks?.Play(SfxCue.Reveal);
         }
 
         public void ShowFinalVoting(
@@ -216,24 +230,26 @@ namespace TableLaughs
             soundHooks?.Play(SfxCue.Reveal);
         }
 
-        public void ShowHeadToHeadResult(Matchup matchup)
+        public void ShowRoundResult(int roundNumber, IReadOnlyList<AnswerSlot> answers)
         {
-            var screen = CreateScreen("Head To Head Result");
-            CreateText(screen.transform, matchup.Prompt.text, 38, textColor, TextAnchor.MiddleCenter, FontStyle.Bold,
-                new Vector2(0f, 280f), new Vector2(1180f, 110f));
+            var screen = CreateScreen("Round Result");
+            CreateText(screen.transform, $"Round {roundNumber} votes", 52, accentColor, TextAnchor.MiddleCenter,
+                FontStyle.Bold, new Vector2(0f, 310f), new Vector2(800f, 80f));
 
-            var aWon = matchup.VotesA >= matchup.VotesB;
-            var bWon = matchup.VotesB >= matchup.VotesA;
-            CreateResultCard(screen.transform, matchup.PlayerA, matchup.AnswerA, matchup.HandwritingA, matchup.VotesA, aWon,
-                new Vector2(-360f, 20f));
-            CreateResultCard(screen.transform, matchup.PlayerB, matchup.AnswerB, matchup.HandwritingB, matchup.VotesB, bWon,
-                new Vector2(360f, 20f));
+            var sorted = answers.OrderByDescending(answer => answer.Votes).ToList();
+            for (var i = 0; i < sorted.Count; i++)
+            {
+                var answer = sorted[i];
+                var row = CreatePanel(screen.transform, $"Round Result {i}", new Vector2(0f, 210f - i * 78f),
+                    new Vector2(1120f, 64f), Color.Lerp(answer.Player.Color, Color.black, 0.35f), 0f);
+                CreateText(row.transform, answer.Player.DisplayName, 23, Color.white,
+                    TextAnchor.MiddleLeft, FontStyle.Bold, new Vector2(-390f, 0f), new Vector2(250f, 54f));
+                CreateAnswerPreview(row.transform, answer.Answer, answer.Handwriting, new Vector2(20f, 0f),
+                    new Vector2(480f, 48f), 5f);
+                CreateText(row.transform, $"{answer.Votes} vote(s)", 25, Color.white, TextAnchor.MiddleRight,
+                    FontStyle.Bold, new Vector2(420f, 0f), new Vector2(230f, 54f));
+            }
 
-            var resultLine = matchup.VotesA == matchup.VotesB
-                ? "The table calls it a tie"
-                : $"{(matchup.VotesA > matchup.VotesB ? matchup.PlayerA.DisplayName : matchup.PlayerB.DisplayName)} takes it";
-            CreateText(screen.transform, resultLine, 46, accentColor, TextAnchor.MiddleCenter, FontStyle.Bold,
-                new Vector2(0f, -270f), new Vector2(1100f, 80f));
             soundHooks?.Play(SfxCue.Score);
         }
 
@@ -524,50 +540,49 @@ namespace TableLaughs
             clearButton.interactable = false;
         }
 
-        private void CreateHeadToHeadVotePanel(
+        private void CreateRoundVotePanel(
             Transform parent,
             PlayerData player,
-            Matchup matchup,
+            IReadOnlyList<AnswerSlot> answers,
             Func<PlayerData, int, bool> onVote)
         {
-            var panel = CreateSeatPanel(parent, $"Vote Panel {player.Id}", player.SeatIndex,
-                new Vector2(390f, 165f), Color.Lerp(player.Color, Color.black, 0.35f));
-            CreateText(panel.transform, player.DisplayName, 20, Color.white, TextAnchor.MiddleCenter,
-                FontStyle.Bold, new Vector2(0f, 55f), new Vector2(330f, 34f));
+            var panel = CreateSeatPanel(parent, $"Round Vote Panel {player.Id}", player.SeatIndex,
+                new Vector2(410f, 178f), Color.Lerp(player.Color, Color.black, 0.35f));
+            CreateText(panel.transform, player.DisplayName, 19, Color.white, TextAnchor.MiddleCenter,
+                FontStyle.Bold, new Vector2(0f, 64f), new Vector2(330f, 30f));
+            var status = CreateText(panel.transform, "Vote", 17, mutedTextColor, TextAnchor.MiddleCenter,
+                FontStyle.Bold, new Vector2(0f, 39f), new Vector2(330f, 24f));
 
-            var status = CreateText(panel.transform, matchup.HasSubmitter(player.Id) ? "Your answer is up" : "Vote",
-                19, mutedTextColor, TextAnchor.MiddleCenter, FontStyle.Bold, new Vector2(0f, 18f),
-                new Vector2(330f, 30f));
+            var gridObject = CreatePanel(panel.transform, "Vote Number Grid", new Vector2(0f, -25f),
+                new Vector2(330f, 105f), new Color(0f, 0f, 0f, 0f), 0f);
+            var grid = gridObject.AddComponent<GridLayoutGroup>();
+            grid.cellSize = new Vector2(70f, 42f);
+            grid.spacing = new Vector2(8f, 8f);
+            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            grid.constraintCount = 4;
+            grid.childAlignment = TextAnchor.MiddleCenter;
 
-            if (matchup.HasSubmitter(player.Id))
+            var buttons = new List<Button>();
+            for (var i = 0; i < answers.Count; i++)
             {
-                return;
+                var answerIndex = i;
+                var isOwnAnswer = answers[i].Player.Id == player.Id;
+                var button = CreateLayoutButton(gridObject.transform, (i + 1).ToString(), () =>
+                {
+                    if (onVote(player, answerIndex))
+                    {
+                        status.text = "Voted";
+                        foreach (var choiceButton in buttons)
+                        {
+                            choiceButton.interactable = false;
+                        }
+
+                        soundHooks?.Play(SfxCue.Vote);
+                    }
+                }, isOwnAnswer ? mutedTextColor : accentColor, 22);
+                button.Button.interactable = !isOwnAnswer;
+                buttons.Add(button.Button);
             }
-
-            ButtonBundle voteA = null;
-            ButtonBundle voteB = null;
-
-            voteA = CreateButton(panel.transform, "A", () =>
-            {
-                if (onVote(player, 0))
-                {
-                    status.text = "Voted";
-                    voteA.Button.interactable = false;
-                    voteB.Button.interactable = false;
-                    soundHooks?.Play(SfxCue.Vote);
-                }
-            }, accentColor, new Vector2(-78f, -42f), new Vector2(135f, 54f), 24);
-
-            voteB = CreateButton(panel.transform, "B", () =>
-            {
-                if (onVote(player, 1))
-                {
-                    status.text = "Voted";
-                    voteA.Button.interactable = false;
-                    voteB.Button.interactable = false;
-                    soundHooks?.Play(SfxCue.Vote);
-                }
-            }, secondAccentColor, new Vector2(78f, -42f), new Vector2(135f, 54f), 24);
         }
 
         private void CreateFinalVotePanel(
@@ -663,42 +678,6 @@ namespace TableLaughs
                 Color.Lerp(accentColor, Color.black, 0.20f), 0f);
             timerText = CreateText(timerPanel.transform, Mathf.CeilToInt(timeLimit).ToString(), 34, Color.black,
                 TextAnchor.MiddleCenter, FontStyle.Bold, Vector2.zero, new Vector2(112f, 58f));
-        }
-
-        private GameObject CreateAnswerCard(
-            Transform parent,
-            string label,
-            string answer,
-            HandwritingAnswer handwriting,
-            Color playerColor,
-            Vector2 position,
-            Vector2 size)
-        {
-            var card = CreatePanel(parent, $"Answer {label}", position, size, Color.Lerp(playerColor, Color.black, 0.22f), 0f);
-            CreateText(card.transform, label, 30, Color.black, TextAnchor.MiddleCenter, FontStyle.Bold,
-                new Vector2(-245f, 98f), new Vector2(54f, 54f), accentColor);
-            CreateAnswerPreview(card.transform, answer, handwriting, new Vector2(20f, -12f),
-                new Vector2(size.x - 140f, size.y - 104f), 10f);
-            return card;
-        }
-
-        private void CreateResultCard(
-            Transform parent,
-            PlayerData player,
-            string answer,
-            HandwritingAnswer handwriting,
-            int votes,
-            bool highlighted,
-            Vector2 position)
-        {
-            var color = highlighted ? Color.Lerp(player.Color, accentColor, 0.25f) : Color.Lerp(player.Color, Color.black, 0.30f);
-            var card = CreatePanel(parent, $"Result {player.Id}", position, new Vector2(590f, 270f), color, 0f);
-            CreateText(card.transform, player.DisplayName, 28, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold,
-                new Vector2(0f, 98f), new Vector2(500f, 50f));
-            CreateAnswerPreview(card.transform, answer, handwriting, new Vector2(0f, 12f), new Vector2(500f, 116f), 9f);
-            CreateText(card.transform, $"{votes} vote(s)", 26, highlighted ? Color.black : textColor,
-                TextAnchor.MiddleCenter, FontStyle.Bold, new Vector2(0f, -98f), new Vector2(280f, 52f),
-                highlighted ? accentColor : softPanelColor);
         }
 
         private void CreateAnswerPreview(
@@ -819,30 +798,6 @@ namespace TableLaughs
             }, accentColor, new Vector2(245f, -145f), new Vector2(170f, 54f), 20);
 
             UpdateDisplay();
-        }
-
-        private IEnumerator AnimatePop(RectTransform target, float delay)
-        {
-            if (target == null)
-            {
-                yield break;
-            }
-
-            target.localScale = Vector3.zero;
-            yield return new WaitForSeconds(delay);
-
-            const float duration = 0.18f;
-            var elapsed = 0f;
-            while (elapsed < duration)
-            {
-                elapsed += Time.deltaTime;
-                var t = Mathf.Clamp01(elapsed / duration);
-                var overshoot = Mathf.Sin(t * Mathf.PI) * 0.18f;
-                target.localScale = Vector3.one * (t + overshoot);
-                yield return null;
-            }
-
-            target.localScale = Vector3.one;
         }
 
         private IEnumerator ConfettiBurst(Transform parent)

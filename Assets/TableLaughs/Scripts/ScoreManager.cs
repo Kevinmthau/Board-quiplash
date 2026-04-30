@@ -8,17 +8,16 @@ namespace TableLaughs
         private const int SweepBonusBase = 250;
 
         public RoundScoreSummary ApplyStandardRoundScores(
-            IReadOnlyList<Matchup> matchups,
+            IReadOnlyList<AnswerSlot> answers,
             int pointsPerVote,
             int playerCount)
         {
             var summary = new RoundScoreSummary();
-            var possibleVotes = Mathf.Max(0, playerCount - 2);
+            var possibleVotes = Mathf.Max(0, playerCount - 1);
 
-            foreach (var matchup in matchups)
+            foreach (var answer in answers)
             {
-                Award(matchup.PlayerA, matchup.VotesA, possibleVotes, pointsPerVote, summary);
-                Award(matchup.PlayerB, matchup.VotesB, possibleVotes, pointsPerVote, summary);
+                Award(answer.Player, answer.Votes, possibleVotes, pointsPerVote, summary);
             }
 
             return summary;

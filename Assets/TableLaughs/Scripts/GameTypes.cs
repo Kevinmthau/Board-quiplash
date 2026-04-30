@@ -50,63 +50,14 @@ namespace TableLaughs
         public string[] randomAnswers;
     }
 
-    public sealed class Matchup
-    {
-        public PromptEntry Prompt;
-        public PlayerData PlayerA;
-        public PlayerData PlayerB;
-        public string AnswerA = string.Empty;
-        public string AnswerB = string.Empty;
-        public HandwritingAnswer HandwritingA = HandwritingAnswer.Blank();
-        public HandwritingAnswer HandwritingB = HandwritingAnswer.Blank();
-        public int VotesA;
-        public int VotesB;
-
-        public IReadOnlyList<int> SubmitterIds => new[] { PlayerA.Id, PlayerB.Id };
-
-        public bool HasSubmitter(int playerId)
-        {
-            return PlayerA.Id == playerId || PlayerB.Id == playerId;
-        }
-
-        public string GetAnswer(int answerIndex)
-        {
-            return answerIndex == 0 ? AnswerA : AnswerB;
-        }
-
-        public HandwritingAnswer GetHandwritingAnswer(int answerIndex)
-        {
-            return answerIndex == 0 ? HandwritingA : HandwritingB;
-        }
-
-        public PlayerData GetAnswerPlayer(int answerIndex)
-        {
-            return answerIndex == 0 ? PlayerA : PlayerB;
-        }
-
-        public void AddVote(int answerIndex)
-        {
-            if (answerIndex == 0)
-            {
-                VotesA++;
-            }
-            else
-            {
-                VotesB++;
-            }
-        }
-    }
-
     public sealed class AnswerSlot
     {
-        public Matchup Matchup;
+        public PromptEntry Prompt;
         public PlayerData Player;
-        public bool IsFirstAnswer;
         public string Answer = string.Empty;
         public HandwritingAnswer Handwriting = HandwritingAnswer.Blank();
         public bool Submitted;
-
-        public PromptEntry Prompt => Matchup.Prompt;
+        public int Votes;
     }
 
     public sealed class FinalAnswer

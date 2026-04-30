@@ -9,32 +9,29 @@ namespace TableLaughs
         private readonly HashSet<int> eligibleVoters = new HashSet<int>();
         private readonly HashSet<int> votersWhoVoted = new HashSet<int>();
 
-        private Matchup activeMatchup;
+        private IReadOnlyList<AnswerSlot> activeRoundAnswers;
         private IReadOnlyList<FinalAnswer> activeFinalAnswers;
 
         public int EligibleVoteCount => eligibleVoters.Count;
         public int SubmittedVoteCount => votersWhoVoted.Count;
         public bool AllEligibleVotesSubmitted => eligibleVoters.Count > 0 && votersWhoVoted.Count >= eligibleVoters.Count;
 
-        public void BeginHeadToHeadVote(Matchup matchup, IReadOnlyList<PlayerData> players)
+        public void BeginRoundVote(IReadOnlyList<AnswerSlot> roundAnswers, IReadOnlyList<PlayerData> players)
         {
-            activeMatchup = matchup;
+            activeRoundAnswers = roundAnswers;
             activeFinalAnswers = null;
             eligibleVoters.Clear();
             votersWhoVoted.Clear();
 
             foreach (var player in players)
             {
-                if (!matchup.HasSubmitter(player.Id))
-                {
-                    eligibleVoters.Add(player.Id);
-                }
+                eligibleVoters.Add(player.Id);
             }
         }
 
-        public bool CastHeadToHeadVote(PlayerData voter, int answerIndex)
+        public bool CastRoundVote(PlayerData voter, int answerIndex)
         {
-            if (activeMatchup == null || voter == null || answerIndex < 0 || answerIndex > 1)
+            if (activeRoundAnswers == null || voter == null || answerIndex < 0 || answerIndex >= activeRoundAnswers.Count)
             {
                 return false;
             }
@@ -44,14 +41,20 @@ namespace TableLaughs
                 return false;
             }
 
-            activeMatchup.AddVote(answerIndex);
+            var selectedAnswer = activeRoundAnswers[answerIndex];
+            if (selectedAnswer.Player.Id == voter.Id)
+            {
+                return false;
+            }
+
+            selectedAnswer.Votes++;
             votersWhoVoted.Add(voter.Id);
             return true;
         }
 
         public void BeginFinalVote(IReadOnlyList<FinalAnswer> finalAnswers, IReadOnlyList<PlayerData> players)
         {
-            activeMatchup = null;
+            activeRoundAnswers = null;
             activeFinalAnswers = finalAnswers;
             eligibleVoters.Clear();
             votersWhoVoted.Clear();
