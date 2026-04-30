@@ -7,7 +7,7 @@ namespace TableLaughs
     public sealed class PlayerManager : MonoBehaviour
     {
         public const int MinPlayers = 3;
-        public const int MaxPlayers = 8;
+        public const int MaxPlayers = 6;
 
         private readonly List<PlayerData> players = new List<PlayerData>();
         private int nextPlayerId = 1;
@@ -30,7 +30,10 @@ namespace TableLaughs
 
         public PlayerData JoinSeat(int seatIndex)
         {
-            if (players.Count >= MaxPlayers || GetPlayerAtSeat(seatIndex) != null)
+            if (seatIndex < 0
+                || seatIndex >= MaxPlayers
+                || players.Count >= MaxPlayers
+                || GetPlayerAtSeat(seatIndex) != null)
             {
                 return null;
             }

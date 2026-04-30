@@ -1,6 +1,6 @@
 # Table Laughs
 
-Table Laughs is an original Board-native local party game prototype for 3 to 8 players. Players join from seats around the Board, write family-friendly joke answers, vote from their own edge panels, and play through three fast rounds.
+Table Laughs is an original Board-native local party game prototype for 3 to 6 players. Players join from seats around the Board, write family-friendly joke answers, vote from their own edge panels, and play through three fast rounds.
 
 ## Run in Unity Editor
 
@@ -14,7 +14,7 @@ If the scene is missing, run `Table Laughs > Create Playable Scene` from Unity's
 ## Game Loop
 
 1. Title screen.
-2. Player join screen with 8 edge seats. Each joined player can edit their name and cycle color.
+2. Player join screen with 6 edge seats. Each joined player can edit their name and cycle color.
 3. Rounds 1 and 2 give every player the same prompt. Players handwrite one answer on blank paper in their own seat-facing panels.
 4. The center of the Board reveals the shared prompt and every answer. Players vote from their seat panels, except for their own answer.
 5. Votes award 100 points in Round 1 and 200 points in Round 2, with a sweep bonus if an answer gets every possible vote.

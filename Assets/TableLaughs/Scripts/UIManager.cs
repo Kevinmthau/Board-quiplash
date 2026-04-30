@@ -14,15 +14,13 @@ namespace TableLaughs
         {
             new Vector2(-560f, -430f),
             new Vector2(560f, -430f),
-            new Vector2(825f, -250f),
-            new Vector2(825f, 250f),
+            new Vector2(825f, 0f),
             new Vector2(560f, 430f),
             new Vector2(-560f, 430f),
-            new Vector2(-825f, 250f),
-            new Vector2(-825f, -250f)
+            new Vector2(-825f, 0f)
         };
 
-        private static readonly float[] SeatRotations = { 0f, 0f, 90f, 90f, 180f, 180f, -90f, -90f };
+        private static readonly float[] SeatRotations = { 0f, 0f, 90f, 180f, 180f, -90f };
 
         private readonly Color backgroundColor = new Color(0.055f, 0.075f, 0.095f);
         private readonly Color panelColor = new Color(0.12f, 0.15f, 0.18f, 0.96f);
@@ -58,7 +56,8 @@ namespace TableLaughs
 
             CreateText(screen.transform, "Table Laughs", 86, accentColor, TextAnchor.MiddleCenter, FontStyle.Bold,
                 new Vector2(0f, 120f), new Vector2(1100f, 130f));
-            CreateText(screen.transform, "A tabletop comedy prompt game for 3-8 players", 34, textColor,
+            CreateText(screen.transform,
+                $"A tabletop comedy prompt game for {PlayerManager.MinPlayers}-{PlayerManager.MaxPlayers} players", 34, textColor,
                 TextAnchor.MiddleCenter, FontStyle.Normal, new Vector2(0f, 40f), new Vector2(1100f, 70f));
 
             CreateButton(screen.transform, "Start", () =>
