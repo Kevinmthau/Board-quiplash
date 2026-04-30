@@ -57,6 +57,8 @@ namespace TableLaughs
         public PlayerData PlayerB;
         public string AnswerA = string.Empty;
         public string AnswerB = string.Empty;
+        public HandwritingAnswer HandwritingA = HandwritingAnswer.Blank();
+        public HandwritingAnswer HandwritingB = HandwritingAnswer.Blank();
         public int VotesA;
         public int VotesB;
 
@@ -70,6 +72,11 @@ namespace TableLaughs
         public string GetAnswer(int answerIndex)
         {
             return answerIndex == 0 ? AnswerA : AnswerB;
+        }
+
+        public HandwritingAnswer GetHandwritingAnswer(int answerIndex)
+        {
+            return answerIndex == 0 ? HandwritingA : HandwritingB;
         }
 
         public PlayerData GetAnswerPlayer(int answerIndex)
@@ -96,6 +103,7 @@ namespace TableLaughs
         public PlayerData Player;
         public bool IsFirstAnswer;
         public string Answer = string.Empty;
+        public HandwritingAnswer Handwriting = HandwritingAnswer.Blank();
         public bool Submitted;
 
         public PromptEntry Prompt => Matchup.Prompt;
@@ -106,8 +114,73 @@ namespace TableLaughs
         public PromptEntry Prompt;
         public PlayerData Player;
         public string Answer = string.Empty;
+        public HandwritingAnswer Handwriting = HandwritingAnswer.Blank();
         public bool Submitted;
         public int Votes;
+    }
+
+    [Serializable]
+    public sealed class HandwritingStroke
+    {
+        public readonly List<Vector2> Points = new List<Vector2>();
+
+        public HandwritingStroke Clone()
+        {
+            var clone = new HandwritingStroke();
+            clone.Points.AddRange(Points);
+            return clone;
+        }
+    }
+
+    [Serializable]
+    public sealed class HandwritingAnswer
+    {
+        public string Text = string.Empty;
+        public readonly List<HandwritingStroke> Strokes = new List<HandwritingStroke>();
+
+        public bool HasInk
+        {
+            get
+            {
+                for (var i = 0; i < Strokes.Count; i++)
+                {
+                    if (Strokes[i].Points.Count > 0)
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+        }
+
+        public static HandwritingAnswer Blank()
+        {
+            return new HandwritingAnswer();
+        }
+
+        public static HandwritingAnswer FromText(string text)
+        {
+            return new HandwritingAnswer
+            {
+                Text = text ?? string.Empty
+            };
+        }
+
+        public HandwritingAnswer Clone()
+        {
+            var clone = new HandwritingAnswer
+            {
+                Text = Text ?? string.Empty
+            };
+
+            for (var i = 0; i < Strokes.Count; i++)
+            {
+                clone.Strokes.Add(Strokes[i].Clone());
+            }
+
+            return clone;
+        }
     }
 
     public sealed class RoundScoreSummary

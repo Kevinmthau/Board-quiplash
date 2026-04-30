@@ -31,6 +31,8 @@ namespace TableLaughs
         private readonly Color mutedTextColor = new Color(0.68f, 0.73f, 0.75f);
         private readonly Color accentColor = new Color(0.98f, 0.78f, 0.22f);
         private readonly Color secondAccentColor = new Color(0.24f, 0.78f, 0.88f);
+        private readonly Color paperColor = new Color(0.98f, 0.96f, 0.89f);
+        private readonly Color inkColor = new Color(0.045f, 0.055f, 0.065f);
 
         private Canvas canvas;
         private RectTransform canvasRect;
@@ -110,11 +112,11 @@ namespace TableLaughs
             IReadOnlyList<PlayerData> players,
             IReadOnlyList<AnswerSlot> answerSlots,
             float timeLimit,
-            Action<AnswerSlot, string> onSubmit,
+            Action<AnswerSlot, HandwritingAnswer> onSubmit,
             Func<string> randomAnswerProvider)
         {
             var screen = CreateScreen("Prompt Entry");
-            CreateRoundHeader(screen.transform, $"Round {roundNumber}", "Write your answer", timeLimit);
+            CreateRoundHeader(screen.transform, $"Round {roundNumber}", "Write on your paper", timeLimit);
 
             foreach (var player in players)
             {
@@ -132,11 +134,11 @@ namespace TableLaughs
             IReadOnlyList<PlayerData> players,
             IReadOnlyList<FinalAnswer> finalAnswers,
             float timeLimit,
-            Action<FinalAnswer, string> onSubmit,
+            Action<FinalAnswer, HandwritingAnswer> onSubmit,
             Func<string> randomAnswerProvider)
         {
             var screen = CreateScreen("Final Prompt Entry");
-            CreateRoundHeader(screen.transform, "Final Round", "Everyone answers the same prompt", timeLimit);
+            CreateRoundHeader(screen.transform, "Final Round", "Write on your paper", timeLimit);
 
             foreach (var player in players)
             {
@@ -158,9 +160,9 @@ namespace TableLaughs
             CreateText(screen.transform, matchup.Prompt.text, 38, textColor, TextAnchor.MiddleCenter, FontStyle.Bold,
                 new Vector2(0f, 250f), new Vector2(1180f, 110f));
 
-            var cardA = CreateAnswerCard(screen.transform, "A", matchup.AnswerA, matchup.PlayerA.Color,
+            var cardA = CreateAnswerCard(screen.transform, "A", matchup.AnswerA, matchup.HandwritingA, matchup.PlayerA.Color,
                 new Vector2(-360f, 35f), new Vector2(590f, 270f));
-            var cardB = CreateAnswerCard(screen.transform, "B", matchup.AnswerB, matchup.PlayerB.Color,
+            var cardB = CreateAnswerCard(screen.transform, "B", matchup.AnswerB, matchup.HandwritingB, matchup.PlayerB.Color,
                 new Vector2(360f, 35f), new Vector2(590f, 270f));
             if (Application.isPlaying)
             {
@@ -201,8 +203,9 @@ namespace TableLaughs
                 var answer = finalAnswers[i];
                 var card = CreateLayoutPanel(answerGrid.transform, $"Final Answer {i + 1}",
                     Color.Lerp(answer.Player.Color, Color.black, 0.18f));
-                CreateText(card.transform, $"{i + 1}. {answer.Answer}", 25, Color.white, TextAnchor.MiddleCenter,
-                    FontStyle.Bold, Vector2.zero, new Vector2(280f, 122f));
+                CreateText(card.transform, (i + 1).ToString(), 24, Color.black, TextAnchor.MiddleCenter,
+                    FontStyle.Bold, new Vector2(-118f, 42f), new Vector2(40f, 40f), accentColor);
+                CreateAnswerPreview(card.transform, answer.Answer, answer.Handwriting, new Vector2(22f, 0f), new Vector2(230f, 96f), 7f);
             }
 
             foreach (var player in players)
@@ -221,9 +224,9 @@ namespace TableLaughs
 
             var aWon = matchup.VotesA >= matchup.VotesB;
             var bWon = matchup.VotesB >= matchup.VotesA;
-            CreateResultCard(screen.transform, matchup.PlayerA, matchup.AnswerA, matchup.VotesA, aWon,
+            CreateResultCard(screen.transform, matchup.PlayerA, matchup.AnswerA, matchup.HandwritingA, matchup.VotesA, aWon,
                 new Vector2(-360f, 20f));
-            CreateResultCard(screen.transform, matchup.PlayerB, matchup.AnswerB, matchup.VotesB, bWon,
+            CreateResultCard(screen.transform, matchup.PlayerB, matchup.AnswerB, matchup.HandwritingB, matchup.VotesB, bWon,
                 new Vector2(360f, 20f));
 
             var resultLine = matchup.VotesA == matchup.VotesB
@@ -246,8 +249,10 @@ namespace TableLaughs
                 var answer = sorted[i];
                 var row = CreatePanel(screen.transform, $"Final Result {i}", new Vector2(0f, 210f - i * 78f),
                     new Vector2(1120f, 64f), Color.Lerp(answer.Player.Color, Color.black, 0.35f), 0f);
-                CreateText(row.transform, $"{answer.Player.DisplayName}: {answer.Answer}", 25, Color.white,
-                    TextAnchor.MiddleLeft, FontStyle.Bold, new Vector2(-165f, 0f), new Vector2(760f, 54f));
+                CreateText(row.transform, answer.Player.DisplayName, 23, Color.white,
+                    TextAnchor.MiddleLeft, FontStyle.Bold, new Vector2(-390f, 0f), new Vector2(250f, 54f));
+                CreateAnswerPreview(row.transform, answer.Answer, answer.Handwriting, new Vector2(20f, 0f),
+                    new Vector2(480f, 48f), 5f);
                 CreateText(row.transform, $"{answer.Votes} vote(s)", 25, Color.white, TextAnchor.MiddleRight,
                     FontStyle.Bold, new Vector2(420f, 0f), new Vector2(230f, 54f));
             }
@@ -387,7 +392,7 @@ namespace TableLaughs
             Transform parent,
             PlayerData player,
             List<AnswerSlot> slots,
-            Action<AnswerSlot, string> onSubmit,
+            Action<AnswerSlot, HandwritingAnswer> onSubmit,
             Func<string> randomAnswerProvider)
         {
             var panel = CreateSeatPanel(parent, $"Prompt Panel {player.Id}", player.SeatIndex,
@@ -406,30 +411,28 @@ namespace TableLaughs
             state.PromptLabel = CreateText(panel.transform, string.Empty, 20, Color.white,
                 TextAnchor.MiddleCenter, FontStyle.Bold, new Vector2(0f, 24f), new Vector2(370f, 76f));
 
-            var answerButton = CreateButton(panel.transform, "Type answer", () =>
+            state.PaperInput = CreateHandwritingPaper(panel.transform, $"Paper {player.Id}",
+                new Vector2(0f, -42f), new Vector2(360f, 78f), true, null, value =>
             {
-                var activeSlot = state.ActiveSlot;
-                if (activeSlot == null)
+                state.DraftAnswer = value;
+                var hasInk = value != null && value.HasInk;
+                if (state.SubmitButton != null)
                 {
-                    return;
+                    state.SubmitButton.interactable = hasInk;
                 }
 
-                ShowKeyboard("Answer", state.Draft, 72, SeatRotations[player.SeatIndex], value =>
+                if (state.ClearButton != null)
                 {
-                    state.Draft = value;
-                    state.AnswerLabel.text = string.IsNullOrWhiteSpace(value) ? "Tap to type" : value;
-                    state.SubmitButton.interactable = true;
-                });
-            }, Color.Lerp(panelColor, Color.white, 0.12f), new Vector2(0f, -45f), new Vector2(360f, 54f), 18);
-            state.AnswerLabel = answerButton.Label;
+                    state.ClearButton.interactable = hasInk;
+                }
+            });
 
-            CreateButton(panel.transform, "Random", () =>
+            var clearButton = CreateButton(panel.transform, "Clear", () =>
             {
-                state.Draft = randomAnswerProvider();
-                state.AnswerLabel.text = state.Draft;
-                state.SubmitButton.interactable = true;
+                state.PaperInput.Clear();
                 soundHooks?.Play(SfxCue.Tap);
-            }, secondAccentColor, new Vector2(-93f, -99f), new Vector2(170f, 42f), 17);
+            }, paperColor, new Vector2(-93f, -101f), new Vector2(170f, 38f), 16);
+            state.ClearButton = clearButton.Button;
 
             var submitButton = CreateButton(panel.transform, "Submit", () =>
             {
@@ -439,17 +442,18 @@ namespace TableLaughs
                     return;
                 }
 
-                if (string.IsNullOrWhiteSpace(state.Draft))
+                var answer = state.PaperInput != null ? state.PaperInput.GetAnswer() : state.DraftAnswer.Clone();
+                if (!answer.HasInk && string.IsNullOrWhiteSpace(answer.Text))
                 {
-                    state.Draft = randomAnswerProvider();
+                    answer = HandwritingAnswer.FromText(randomAnswerProvider());
                 }
 
-                onSubmit?.Invoke(activeSlot, state.Draft);
+                onSubmit?.Invoke(activeSlot, answer);
                 state.CurrentIndex = NextOpenIndex(slots);
-                state.Draft = string.Empty;
+                state.DraftAnswer = HandwritingAnswer.Blank();
                 RefreshPromptState(state);
                 soundHooks?.Play(SfxCue.Tap);
-            }, accentColor, new Vector2(93f, -99f), new Vector2(170f, 42f), 17);
+            }, accentColor, new Vector2(93f, -101f), new Vector2(170f, 38f), 16);
             state.SubmitButton = submitButton.Button;
 
             RefreshPromptState(state);
@@ -459,43 +463,42 @@ namespace TableLaughs
             Transform parent,
             PlayerData player,
             FinalAnswer finalAnswer,
-            Action<FinalAnswer, string> onSubmit,
+            Action<FinalAnswer, HandwritingAnswer> onSubmit,
             Func<string> randomAnswerProvider)
         {
             var panel = CreateSeatPanel(parent, $"Final Prompt Panel {player.Id}", player.SeatIndex,
                 new Vector2(430f, 245f), Color.Lerp(player.Color, Color.black, 0.30f));
 
-            var draft = string.Empty;
+            var draft = HandwritingAnswer.Blank();
             CreateText(panel.transform, player.DisplayName, 20, Color.white, TextAnchor.MiddleCenter,
                 FontStyle.Bold, new Vector2(0f, 99f), new Vector2(360f, 30f));
             CreateText(panel.transform, finalAnswer.Prompt.text, 20, Color.white, TextAnchor.MiddleCenter,
                 FontStyle.Bold, new Vector2(0f, 34f), new Vector2(370f, 100f));
 
-            Text answerLabel = null;
             Button submitButton = null;
-            var answerButton = CreateButton(panel.transform, "Tap to type", () =>
+            Button clearButton = null;
+            var paperInput = CreateHandwritingPaper(panel.transform, $"Final Paper {player.Id}",
+                new Vector2(0f, -42f), new Vector2(360f, 78f), true, null, value =>
             {
-                if (finalAnswer.Submitted)
+                draft = value ?? HandwritingAnswer.Blank();
+                var hasInk = draft.HasInk;
+                if (submitButton != null)
                 {
-                    return;
+                    submitButton.interactable = hasInk;
                 }
 
-                ShowKeyboard("Final answer", draft, 72, SeatRotations[player.SeatIndex], value =>
+                if (clearButton != null)
                 {
-                    draft = value;
-                    answerLabel.text = string.IsNullOrWhiteSpace(value) ? "Tap to type" : value;
-                    submitButton.interactable = true;
-                });
-            }, Color.Lerp(panelColor, Color.white, 0.12f), new Vector2(0f, -44f), new Vector2(360f, 54f), 18);
-            answerLabel = answerButton.Label;
+                    clearButton.interactable = hasInk;
+                }
+            });
 
-            CreateButton(panel.transform, "Random", () =>
+            var clear = CreateButton(panel.transform, "Clear", () =>
             {
-                draft = randomAnswerProvider();
-                answerLabel.text = draft;
-                submitButton.interactable = true;
+                paperInput.Clear();
                 soundHooks?.Play(SfxCue.Tap);
-            }, secondAccentColor, new Vector2(-93f, -99f), new Vector2(170f, 42f), 17);
+            }, paperColor, new Vector2(-93f, -101f), new Vector2(170f, 38f), 16);
+            clearButton = clear.Button;
 
             var submit = CreateButton(panel.transform, "Submit", () =>
             {
@@ -504,17 +507,21 @@ namespace TableLaughs
                     return;
                 }
 
-                if (string.IsNullOrWhiteSpace(draft))
+                var answer = paperInput != null ? paperInput.GetAnswer() : draft.Clone();
+                if (!answer.HasInk && string.IsNullOrWhiteSpace(answer.Text))
                 {
-                    draft = randomAnswerProvider();
+                    answer = HandwritingAnswer.FromText(randomAnswerProvider());
                 }
 
-                onSubmit?.Invoke(finalAnswer, draft);
-                answerLabel.text = "Ready";
+                onSubmit?.Invoke(finalAnswer, answer);
+                paperInput.SetInputEnabled(false);
+                clearButton.interactable = false;
                 submitButton.interactable = false;
                 soundHooks?.Play(SfxCue.Tap);
-            }, accentColor, new Vector2(93f, -99f), new Vector2(170f, 42f), 17);
+            }, accentColor, new Vector2(93f, -101f), new Vector2(170f, 38f), 16);
             submitButton = submit.Button;
+            submitButton.interactable = false;
+            clearButton.interactable = false;
         }
 
         private void CreateHeadToHeadVotePanel(
@@ -613,18 +620,23 @@ namespace TableLaughs
             {
                 state.ProgressLabel.text = "All set";
                 state.PromptLabel.text = "Ready for voting";
-                state.AnswerLabel.text = "Submitted";
+                state.PaperInput.SetAnswer(HandwritingAnswer.Blank());
+                state.PaperInput.SetInputEnabled(false);
                 state.SubmitButton.interactable = false;
+                state.ClearButton.interactable = false;
                 return;
             }
 
             var slot = state.ActiveSlot;
+            state.DraftAnswer = HandwritingAnswer.Blank();
             state.ProgressLabel.text = state.Slots.Count == 1
                 ? "Prompt"
                 : $"Prompt {state.CurrentIndex + 1}/{state.Slots.Count}";
             state.PromptLabel.text = slot.Prompt.text;
-            state.AnswerLabel.text = "Tap to type";
-            state.SubmitButton.interactable = true;
+            state.PaperInput.SetAnswer(HandwritingAnswer.Blank());
+            state.PaperInput.SetInputEnabled(true);
+            state.SubmitButton.interactable = false;
+            state.ClearButton.interactable = false;
         }
 
         private static int NextOpenIndex(IReadOnlyList<AnswerSlot> slots)
@@ -657,6 +669,7 @@ namespace TableLaughs
             Transform parent,
             string label,
             string answer,
+            HandwritingAnswer handwriting,
             Color playerColor,
             Vector2 position,
             Vector2 size)
@@ -664,22 +677,70 @@ namespace TableLaughs
             var card = CreatePanel(parent, $"Answer {label}", position, size, Color.Lerp(playerColor, Color.black, 0.22f), 0f);
             CreateText(card.transform, label, 30, Color.black, TextAnchor.MiddleCenter, FontStyle.Bold,
                 new Vector2(-245f, 98f), new Vector2(54f, 54f), accentColor);
-            CreateText(card.transform, answer, 34, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold,
-                new Vector2(0f, -8f), new Vector2(size.x - 70f, size.y - 82f));
+            CreateAnswerPreview(card.transform, answer, handwriting, new Vector2(20f, -12f),
+                new Vector2(size.x - 140f, size.y - 104f), 10f);
             return card;
         }
 
-        private void CreateResultCard(Transform parent, PlayerData player, string answer, int votes, bool highlighted, Vector2 position)
+        private void CreateResultCard(
+            Transform parent,
+            PlayerData player,
+            string answer,
+            HandwritingAnswer handwriting,
+            int votes,
+            bool highlighted,
+            Vector2 position)
         {
             var color = highlighted ? Color.Lerp(player.Color, accentColor, 0.25f) : Color.Lerp(player.Color, Color.black, 0.30f);
             var card = CreatePanel(parent, $"Result {player.Id}", position, new Vector2(590f, 270f), color, 0f);
             CreateText(card.transform, player.DisplayName, 28, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold,
                 new Vector2(0f, 98f), new Vector2(500f, 50f));
-            CreateText(card.transform, answer, 31, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold,
-                new Vector2(0f, 18f), new Vector2(500f, 120f));
+            CreateAnswerPreview(card.transform, answer, handwriting, new Vector2(0f, 12f), new Vector2(500f, 116f), 9f);
             CreateText(card.transform, $"{votes} vote(s)", 26, highlighted ? Color.black : textColor,
                 TextAnchor.MiddleCenter, FontStyle.Bold, new Vector2(0f, -98f), new Vector2(280f, 52f),
                 highlighted ? accentColor : softPanelColor);
+        }
+
+        private void CreateAnswerPreview(
+            Transform parent,
+            string fallbackText,
+            HandwritingAnswer handwriting,
+            Vector2 position,
+            Vector2 size,
+            float strokeThickness)
+        {
+            if (handwriting != null && handwriting.HasInk)
+            {
+                CreateHandwritingPaper(parent, "Handwritten Answer", position, size, false, handwriting, null, strokeThickness);
+                return;
+            }
+
+            CreateText(parent, fallbackText, 31, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold, position, size);
+        }
+
+        private HandwritingPaperInput CreateHandwritingPaper(
+            Transform parent,
+            string name,
+            Vector2 position,
+            Vector2 size,
+            bool interactive,
+            HandwritingAnswer initialAnswer,
+            Action<HandwritingAnswer> onChanged,
+            float strokeThickness = 7f)
+        {
+            var paper = CreatePanel(parent, name, position, size, paperColor, 0f);
+            var image = paper.GetComponent<Image>();
+            image.raycastTarget = interactive;
+
+            var outline = paper.AddComponent<Outline>();
+            outline.effectColor = new Color(0.44f, 0.37f, 0.26f, 0.34f);
+            outline.effectDistance = new Vector2(2f, -2f);
+
+            var input = paper.AddComponent<HandwritingPaperInput>();
+            input.Initialize(inkColor, strokeThickness, onChanged);
+            input.SetAnswer(initialAnswer ?? HandwritingAnswer.Blank());
+            input.SetInputEnabled(interactive);
+            return input;
         }
 
         private void ShowKeyboard(string title, string initialValue, int maxLength, float rotation, Action<string> onChanged)
@@ -1038,11 +1099,12 @@ namespace TableLaughs
             public PlayerData Player;
             public List<AnswerSlot> Slots;
             public int CurrentIndex;
-            public string Draft = string.Empty;
+            public HandwritingAnswer DraftAnswer = HandwritingAnswer.Blank();
             public Text ProgressLabel;
             public Text PromptLabel;
-            public Text AnswerLabel;
+            public HandwritingPaperInput PaperInput;
             public Button SubmitButton;
+            public Button ClearButton;
 
             public AnswerSlot ActiveSlot => CurrentIndex < Slots.Count ? Slots[CurrentIndex] : null;
         }

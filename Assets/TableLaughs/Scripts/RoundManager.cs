@@ -61,32 +61,48 @@ namespace TableLaughs
 
         public void SubmitAnswer(AnswerSlot slot, string answer)
         {
+            SubmitAnswer(slot, HandwritingAnswer.FromText(answer));
+        }
+
+        public void SubmitAnswer(AnswerSlot slot, HandwritingAnswer answer)
+        {
             if (slot == null || slot.Submitted)
             {
                 return;
             }
 
-            slot.Answer = CleanAnswer(answer);
+            var submittedAnswer = CleanHandwritingAnswer(answer, "Handwritten answer");
+            slot.Answer = submittedAnswer.Text;
+            slot.Handwriting = submittedAnswer;
             slot.Submitted = true;
 
             if (slot.IsFirstAnswer)
             {
                 slot.Matchup.AnswerA = slot.Answer;
+                slot.Matchup.HandwritingA = submittedAnswer.Clone();
             }
             else
             {
                 slot.Matchup.AnswerB = slot.Answer;
+                slot.Matchup.HandwritingB = submittedAnswer.Clone();
             }
         }
 
         public void SubmitFinalAnswer(FinalAnswer finalAnswer, string answer)
+        {
+            SubmitFinalAnswer(finalAnswer, HandwritingAnswer.FromText(answer));
+        }
+
+        public void SubmitFinalAnswer(FinalAnswer finalAnswer, HandwritingAnswer answer)
         {
             if (finalAnswer == null || finalAnswer.Submitted)
             {
                 return;
             }
 
-            finalAnswer.Answer = CleanAnswer(answer);
+            var submittedAnswer = CleanHandwritingAnswer(answer, "Handwritten answer");
+            finalAnswer.Answer = submittedAnswer.Text;
+            finalAnswer.Handwriting = submittedAnswer;
             finalAnswer.Submitted = true;
         }
 
@@ -153,9 +169,16 @@ namespace TableLaughs
             }
         }
 
-        private static string CleanAnswer(string answer)
+        private static HandwritingAnswer CleanHandwritingAnswer(HandwritingAnswer answer, string inkFallback)
         {
-            var cleaned = string.IsNullOrWhiteSpace(answer) ? "A tiny parade of waffles" : answer.Trim();
+            var cleanedAnswer = answer?.Clone() ?? HandwritingAnswer.Blank();
+            cleanedAnswer.Text = CleanAnswer(cleanedAnswer.Text, cleanedAnswer.HasInk ? inkFallback : "A tiny parade of waffles");
+            return cleanedAnswer;
+        }
+
+        private static string CleanAnswer(string answer, string blankFallback)
+        {
+            var cleaned = string.IsNullOrWhiteSpace(answer) ? blankFallback : answer.Trim();
             return cleaned.Length > 80 ? cleaned.Substring(0, 80) : cleaned;
         }
 
