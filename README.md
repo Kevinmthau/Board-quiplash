@@ -15,8 +15,8 @@ If the scene is missing, run `Table Laughs > Create Playable Scene` from Unity's
 
 1. Title screen.
 2. Player join screen with 8 edge seats. Each joined player can edit their name and cycle color.
-3. Rounds 1 and 2 assign prompt matchups. Players handwrite answers on blank paper in their own seat-facing panels.
-4. The center of the Board reveals one prompt and two answers. Non-submitters vote from their seat panels.
+3. Rounds 1 and 2 give every player the same prompt. Players handwrite one answer on blank paper in their own seat-facing panels.
+4. The center of the Board reveals the shared prompt and every answer. Players vote from their seat panels, except for their own answer.
 5. Votes award 100 points in Round 1 and 200 points in Round 2, with a sweep bonus if an answer gets every possible vote.
 6. Round 3 gives everyone the same final prompt. Players vote among all final answers, except their own.
 7. The winner screen shows the leaderboard, confetti, and a `Play Again` button.
@@ -47,7 +47,7 @@ Add more entries to `prompts`, `finalPrompts`, or `randomAnswers`. Keep prompt c
 - `GameManager`: high-level phase and coroutine flow.
 - `PlayerManager`: local players, seats, names, colors, leaderboard.
 - `PromptManager`: JSON prompt loading and random fallback answers.
-- `RoundManager`: matchup creation, final prompt setup, answer submission.
+- `RoundManager`: shared prompt creation, final prompt setup, answer submission.
 - `VoteManager`: vote eligibility and vote capture.
 - `ScoreManager`: points and sweep bonuses.
 - `UIManager`: runtime tabletop UI, handwriting paper, voting panels, reveal screens.

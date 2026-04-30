@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -7,13 +6,11 @@ namespace TableLaughs
 {
     public sealed class RoundManager : MonoBehaviour
     {
-        private readonly List<Matchup> currentMatchups = new List<Matchup>();
         private readonly List<AnswerSlot> currentAnswerSlots = new List<AnswerSlot>();
         private readonly List<FinalAnswer> finalAnswers = new List<FinalAnswer>();
 
         public int CurrentRound { get; private set; } = 1;
         public bool IsFinalRound => CurrentRound == 3;
-        public IReadOnlyList<Matchup> CurrentMatchups => currentMatchups;
         public IReadOnlyList<AnswerSlot> CurrentAnswerSlots => currentAnswerSlots;
         public IReadOnlyList<FinalAnswer> FinalAnswers => finalAnswers;
         public PromptEntry CurrentFinalPrompt { get; private set; }
@@ -34,7 +31,6 @@ namespace TableLaughs
         public void BeginRound(int roundNumber, IReadOnlyList<PlayerData> players, PromptManager promptManager)
         {
             CurrentRound = Mathf.Clamp(roundNumber, 1, 3);
-            currentMatchups.Clear();
             currentAnswerSlots.Clear();
             finalAnswers.Clear();
             CurrentFinalPrompt = null;
@@ -75,17 +71,6 @@ namespace TableLaughs
             slot.Answer = submittedAnswer.Text;
             slot.Handwriting = submittedAnswer;
             slot.Submitted = true;
-
-            if (slot.IsFirstAnswer)
-            {
-                slot.Matchup.AnswerA = slot.Answer;
-                slot.Matchup.HandwritingA = submittedAnswer.Clone();
-            }
-            else
-            {
-                slot.Matchup.AnswerB = slot.Answer;
-                slot.Matchup.HandwritingB = submittedAnswer.Clone();
-            }
         }
 
         public void SubmitFinalAnswer(FinalAnswer finalAnswer, string answer)
@@ -126,32 +111,13 @@ namespace TableLaughs
 
         private void BuildStandardRound(IReadOnlyList<PlayerData> players, PromptManager promptManager)
         {
-            var shuffledPlayers = players.ToList();
-            Shuffle(shuffledPlayers);
-
-            for (var i = 0; i < shuffledPlayers.Count; i += 2)
+            var sharedPrompt = promptManager.DrawStandardPrompt();
+            foreach (var player in players)
             {
-                var playerA = shuffledPlayers[i];
-                var playerB = i + 1 < shuffledPlayers.Count ? shuffledPlayers[i + 1] : shuffledPlayers[0];
-                var matchup = new Matchup
-                {
-                    Prompt = promptManager.DrawStandardPrompt(),
-                    PlayerA = playerA,
-                    PlayerB = playerB
-                };
-
-                currentMatchups.Add(matchup);
                 currentAnswerSlots.Add(new AnswerSlot
                 {
-                    Matchup = matchup,
-                    Player = playerA,
-                    IsFirstAnswer = true
-                });
-                currentAnswerSlots.Add(new AnswerSlot
-                {
-                    Matchup = matchup,
-                    Player = playerB,
-                    IsFirstAnswer = false
+                    Prompt = sharedPrompt,
+                    Player = player
                 });
             }
         }
@@ -180,16 +146,6 @@ namespace TableLaughs
         {
             var cleaned = string.IsNullOrWhiteSpace(answer) ? blankFallback : answer.Trim();
             return cleaned.Length > 80 ? cleaned.Substring(0, 80) : cleaned;
-        }
-
-        private void Shuffle<T>(IList<T> values)
-        {
-            var random = new System.Random(unchecked(Environment.TickCount + CurrentRound * 7919));
-            for (var i = values.Count - 1; i > 0; i--)
-            {
-                var swapIndex = random.Next(i + 1);
-                (values[i], values[swapIndex]) = (values[swapIndex], values[i]);
-            }
         }
     }
 }

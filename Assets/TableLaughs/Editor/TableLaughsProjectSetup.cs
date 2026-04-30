@@ -66,9 +66,18 @@ namespace TableLaughs.EditorTools
                 players.ResetScores();
 
                 rounds.BeginRound(1, players.Players, prompts);
-                if (rounds.CurrentMatchups.Count == 0 || rounds.CurrentAnswerSlots.Count == 0)
+                if (rounds.CurrentAnswerSlots.Count != players.Players.Count)
                 {
-                    throw new InvalidOperationException("Round 1 did not create matchups and answer slots.");
+                    throw new InvalidOperationException("Round 1 did not create one answer slot per player.");
+                }
+
+                var sharedPrompt = rounds.CurrentAnswerSlots[0].Prompt;
+                foreach (var slot in rounds.CurrentAnswerSlots)
+                {
+                    if (slot.Prompt != sharedPrompt)
+                    {
+                        throw new InvalidOperationException("Round 1 did not assign the same prompt to every player.");
+                    }
                 }
 
                 foreach (var slot in rounds.CurrentAnswerSlots)
@@ -76,19 +85,15 @@ namespace TableLaughs.EditorTools
                     rounds.SubmitAnswer(slot, $"Smoke answer {slot.Player.Id}");
                 }
 
-                foreach (var matchup in rounds.CurrentMatchups)
+                votes.BeginRoundVote(rounds.CurrentAnswerSlots, players.Players);
+                for (var voterIndex = 0; voterIndex < players.Players.Count; voterIndex++)
                 {
-                    votes.BeginHeadToHeadVote(matchup, players.Players);
-                    foreach (var player in players.Players)
-                    {
-                        if (!matchup.HasSubmitter(player.Id))
-                        {
-                            votes.CastHeadToHeadVote(player, 0);
-                        }
-                    }
+                    var voter = players.Players[voterIndex];
+                    var answerIndex = (voterIndex + 1) % rounds.CurrentAnswerSlots.Count;
+                    votes.CastRoundVote(voter, answerIndex);
                 }
 
-                scores.ApplyStandardRoundScores(rounds.CurrentMatchups, rounds.PointsPerVote, players.Players.Count);
+                scores.ApplyStandardRoundScores(rounds.CurrentAnswerSlots, rounds.PointsPerVote, players.Players.Count);
 
                 rounds.BeginRound(3, players.Players, prompts);
                 foreach (var answer in rounds.FinalAnswers)
@@ -149,10 +154,16 @@ namespace TableLaughs.EditorTools
                     rounds.SubmitAnswer(slot, $"UI answer {slot.Player.Id}");
                 }
 
-                var matchup = rounds.CurrentMatchups[0];
-                votes.BeginHeadToHeadVote(matchup, players.Players);
-                ui.ShowHeadToHeadVoting(1, matchup, players.Players, 25f, votes.CastHeadToHeadVote);
-                ui.ShowHeadToHeadResult(matchup);
+                votes.BeginRoundVote(rounds.CurrentAnswerSlots, players.Players);
+                for (var voterIndex = 0; voterIndex < players.Players.Count; voterIndex++)
+                {
+                    var voter = players.Players[voterIndex];
+                    var answerIndex = (voterIndex + 1) % rounds.CurrentAnswerSlots.Count;
+                    votes.CastRoundVote(voter, answerIndex);
+                }
+
+                ui.ShowRoundVoting(1, players.Players, rounds.CurrentAnswerSlots, 35f, votes.CastRoundVote);
+                ui.ShowRoundResult(1, rounds.CurrentAnswerSlots);
 
                 rounds.BeginRound(3, players.Players, prompts);
                 ui.ShowFinalPromptEntry(players.Players, rounds.FinalAnswers, 75f,

@@ -121,13 +121,13 @@ namespace TableLaughs
                 }
                 else
                 {
-                    yield return RunHeadToHeadVotingPhase();
+                    yield return RunSharedPromptVotingPhase();
                 }
 
                 var scoreSummary = roundManager.IsFinalRound
                     ? scoreManager.ApplyFinalRoundScores(roundManager.FinalAnswers, roundManager.PointsPerVote,
                         playerManager.Players.Count)
-                    : scoreManager.ApplyStandardRoundScores(roundManager.CurrentMatchups, roundManager.PointsPerVote,
+                    : scoreManager.ApplyStandardRoundScores(roundManager.CurrentAnswerSlots, roundManager.PointsPerVote,
                         playerManager.Players.Count);
 
                 if (!roundManager.IsFinalRound)
@@ -185,24 +185,22 @@ namespace TableLaughs
             yield return new WaitForSeconds(0.25f);
         }
 
-        private IEnumerator RunHeadToHeadVotingPhase()
+        private IEnumerator RunSharedPromptVotingPhase()
         {
             phase = GamePhase.Voting;
-            foreach (var matchup in roundManager.CurrentMatchups)
-            {
-                voteManager.BeginHeadToHeadVote(matchup, playerManager.Players);
-                uiManager.ShowHeadToHeadVoting(
-                    roundManager.CurrentRound,
-                    matchup,
-                    playerManager.Players,
-                    voteSeconds,
-                    voteManager.CastHeadToHeadVote);
+            var votingSeconds = voteSeconds + 10f;
+            voteManager.BeginRoundVote(roundManager.CurrentAnswerSlots, playerManager.Players);
+            uiManager.ShowRoundVoting(
+                roundManager.CurrentRound,
+                playerManager.Players,
+                roundManager.CurrentAnswerSlots,
+                votingSeconds,
+                voteManager.CastRoundVote);
 
-                yield return WaitForVotesOrTimer();
+            yield return WaitForVotesOrTimer(votingSeconds);
 
-                uiManager.ShowHeadToHeadResult(matchup);
-                yield return new WaitForSeconds(revealSeconds);
-            }
+            uiManager.ShowRoundResult(roundManager.CurrentRound, roundManager.CurrentAnswerSlots);
+            yield return new WaitForSeconds(revealSeconds + 0.4f);
         }
 
         private IEnumerator RunFinalVotingPhase()
@@ -219,11 +217,6 @@ namespace TableLaughs
 
             uiManager.ShowFinalResult(roundManager.FinalAnswers);
             yield return new WaitForSeconds(revealSeconds + 0.8f);
-        }
-
-        private IEnumerator WaitForVotesOrTimer()
-        {
-            yield return WaitForVotesOrTimer(voteSeconds);
         }
 
         private IEnumerator WaitForVotesOrTimer(float seconds)
