@@ -22,6 +22,17 @@ namespace TableLaughs
 
         private static readonly float[] SeatRotations = { 0f, 0f, 90f, 180f, 180f, -90f };
 
+        private static readonly Vector2 RoundStatusPosition = new Vector2(0f, 270f);
+        private static readonly Vector2 RoundStatusSize = new Vector2(1180f, 62f);
+        private static readonly Vector2 PromptEntryCardPosition = new Vector2(0f, 92f);
+        private static readonly Vector2 PromptEntryCardSize = new Vector2(1040f, 210f);
+        private static readonly Vector2 VotingPromptPosition = new Vector2(0f, 184f);
+        private static readonly Vector2 VotingPromptSize = new Vector2(1120f, 96f);
+        private static readonly Vector2 AnswerGridPosition = new Vector2(0f, -74f);
+        private static readonly Vector2 AnswerGridSize = new Vector2(1180f, 420f);
+        private static readonly Vector2 PromptSeatPanelSize = new Vector2(430f, 220f);
+        private static readonly Vector2 VoteSeatPanelSize = new Vector2(392f, 158f);
+
         private readonly Color backgroundColor = new Color(0.055f, 0.075f, 0.095f);
         private readonly Color panelColor = new Color(0.12f, 0.15f, 0.18f, 0.96f);
         private readonly Color softPanelColor = new Color(0.18f, 0.22f, 0.26f, 0.96f);
@@ -117,6 +128,13 @@ namespace TableLaughs
             var screen = CreateScreen("Prompt Entry");
             CreateRoundHeader(screen.transform, $"Round {roundNumber}", "Write on your paper", timeLimit);
 
+            var sharedPrompt = answerSlots.FirstOrDefault()?.Prompt.text;
+            if (!string.IsNullOrWhiteSpace(sharedPrompt))
+            {
+                CreateCenterPromptCard(screen.transform, sharedPrompt, "Prompt", PromptEntryCardPosition,
+                    PromptEntryCardSize, 34);
+            }
+
             foreach (var player in players)
             {
                 var playerSlots = answerSlots.Where(slot => slot.Player.Id == player.Id).ToList();
@@ -139,6 +157,13 @@ namespace TableLaughs
             var screen = CreateScreen("Final Prompt Entry");
             CreateRoundHeader(screen.transform, "Final Round", "Write on your paper", timeLimit);
 
+            var finalPrompt = finalAnswers.FirstOrDefault()?.Prompt.text;
+            if (!string.IsNullOrWhiteSpace(finalPrompt))
+            {
+                CreateCenterPromptCard(screen.transform, finalPrompt, "Final prompt", PromptEntryCardPosition,
+                    PromptEntryCardSize, 34);
+            }
+
             foreach (var player in players)
             {
                 var finalAnswer = finalAnswers.First(answer => answer.Player.Id == player.Id);
@@ -158,28 +183,18 @@ namespace TableLaughs
 
             if (answers.Count > 0)
             {
-                CreateText(screen.transform, answers[0].Prompt.text, 36, textColor, TextAnchor.MiddleCenter,
-                    FontStyle.Bold, new Vector2(0f, 270f), new Vector2(1240f, 90f));
+                CreateCenterPromptCard(screen.transform, answers[0].Prompt.text, "Voting prompt",
+                    VotingPromptPosition, VotingPromptSize, 30);
             }
 
-            var answerGrid = CreatePanel(screen.transform, "Round Answer Grid", new Vector2(0f, 10f),
-                new Vector2(1280f, 480f), new Color(0f, 0f, 0f, 0f), 0f);
-            var grid = answerGrid.AddComponent<GridLayoutGroup>();
-            grid.cellSize = new Vector2(300f, 140f);
-            grid.spacing = new Vector2(18f, 18f);
-            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-            grid.constraintCount = 4;
-            grid.childAlignment = TextAnchor.MiddleCenter;
+            var answerGrid = CreateAnswerGrid(screen.transform, "Round Answer Grid", answers.Count, out var cellSize);
 
             for (var i = 0; i < answers.Count; i++)
             {
                 var answer = answers[i];
                 var card = CreateLayoutPanel(answerGrid.transform, $"Round Answer {i + 1}",
                     Color.Lerp(answer.Player.Color, Color.black, 0.18f));
-                CreateText(card.transform, (i + 1).ToString(), 24, Color.black, TextAnchor.MiddleCenter,
-                    FontStyle.Bold, new Vector2(-118f, 42f), new Vector2(40f, 40f), accentColor);
-                CreateAnswerPreview(card.transform, answer.Answer, answer.Handwriting, new Vector2(22f, 0f),
-                    new Vector2(230f, 96f), 7f);
+                AddAnswerCardContent(card.transform, i + 1, answer.Answer, answer.Handwriting, cellSize);
             }
 
             foreach (var player in players)
@@ -199,26 +214,21 @@ namespace TableLaughs
             var screen = CreateScreen("Final Vote");
             CreateRoundHeader(screen.transform, "Final Vote", "Choose a favorite that is not your own", timeLimit);
 
-            CreateText(screen.transform, finalAnswers[0].Prompt.text, 36, textColor, TextAnchor.MiddleCenter,
-                FontStyle.Bold, new Vector2(0f, 270f), new Vector2(1240f, 90f));
+            if (finalAnswers.Count > 0)
+            {
+                CreateCenterPromptCard(screen.transform, finalAnswers[0].Prompt.text, "Voting prompt",
+                    VotingPromptPosition, VotingPromptSize, 30);
+            }
 
-            var answerGrid = CreatePanel(screen.transform, "Final Answer Grid", new Vector2(0f, 10f),
-                new Vector2(1280f, 480f), new Color(0f, 0f, 0f, 0f), 0f);
-            var grid = answerGrid.AddComponent<GridLayoutGroup>();
-            grid.cellSize = new Vector2(300f, 140f);
-            grid.spacing = new Vector2(18f, 18f);
-            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-            grid.constraintCount = 4;
-            grid.childAlignment = TextAnchor.MiddleCenter;
+            var answerGrid = CreateAnswerGrid(screen.transform, "Final Answer Grid", finalAnswers.Count,
+                out var cellSize);
 
             for (var i = 0; i < finalAnswers.Count; i++)
             {
                 var answer = finalAnswers[i];
                 var card = CreateLayoutPanel(answerGrid.transform, $"Final Answer {i + 1}",
                     Color.Lerp(answer.Player.Color, Color.black, 0.18f));
-                CreateText(card.transform, (i + 1).ToString(), 24, Color.black, TextAnchor.MiddleCenter,
-                    FontStyle.Bold, new Vector2(-118f, 42f), new Vector2(40f, 40f), accentColor);
-                CreateAnswerPreview(card.transform, answer.Answer, answer.Handwriting, new Vector2(22f, 0f), new Vector2(230f, 96f), 7f);
+                AddAnswerCardContent(card.transform, i + 1, answer.Answer, answer.Handwriting, cellSize);
             }
 
             foreach (var player in players)
@@ -411,23 +421,20 @@ namespace TableLaughs
             Func<string> randomAnswerProvider)
         {
             var panel = CreateSeatPanel(parent, $"Prompt Panel {player.Id}", player.SeatIndex,
-                new Vector2(430f, 245f), Color.Lerp(player.Color, Color.black, 0.30f));
+                PromptSeatPanelSize, Color.Lerp(player.Color, Color.black, 0.30f));
             var state = new PromptPanelState
             {
-                Player = player,
                 Slots = slots,
                 CurrentIndex = NextOpenIndex(slots)
             };
 
             CreateText(panel.transform, player.DisplayName, 20, Color.white, TextAnchor.MiddleCenter,
-                FontStyle.Bold, new Vector2(0f, 99f), new Vector2(360f, 30f));
+                FontStyle.Bold, new Vector2(0f, 84f), new Vector2(360f, 28f));
             state.ProgressLabel = CreateText(panel.transform, string.Empty, 17, mutedTextColor,
-                TextAnchor.MiddleCenter, FontStyle.Bold, new Vector2(0f, 72f), new Vector2(360f, 26f));
-            state.PromptLabel = CreateText(panel.transform, string.Empty, 20, Color.white,
-                TextAnchor.MiddleCenter, FontStyle.Bold, new Vector2(0f, 24f), new Vector2(370f, 76f));
+                TextAnchor.MiddleCenter, FontStyle.Bold, new Vector2(0f, 58f), new Vector2(360f, 24f));
 
             state.PaperInput = CreateHandwritingPaper(panel.transform, $"Paper {player.Id}",
-                new Vector2(0f, -42f), new Vector2(360f, 78f), true, null, value =>
+                new Vector2(0f, -8f), new Vector2(352f, 98f), true, null, value =>
             {
                 state.DraftAnswer = value;
                 var hasInk = value != null && value.HasInk;
@@ -446,7 +453,7 @@ namespace TableLaughs
             {
                 state.PaperInput.Clear();
                 soundHooks?.Play(SfxCue.Tap);
-            }, paperColor, new Vector2(-93f, -101f), new Vector2(170f, 38f), 16);
+            }, paperColor, new Vector2(-90f, -84f), new Vector2(164f, 38f), 16);
             state.ClearButton = clearButton.Button;
 
             var submitButton = CreateButton(panel.transform, "Submit", () =>
@@ -468,7 +475,7 @@ namespace TableLaughs
                 state.DraftAnswer = HandwritingAnswer.Blank();
                 RefreshPromptState(state);
                 soundHooks?.Play(SfxCue.Tap);
-            }, accentColor, new Vector2(93f, -101f), new Vector2(170f, 38f), 16);
+            }, accentColor, new Vector2(90f, -84f), new Vector2(164f, 38f), 16);
             state.SubmitButton = submitButton.Button;
 
             RefreshPromptState(state);
@@ -482,18 +489,18 @@ namespace TableLaughs
             Func<string> randomAnswerProvider)
         {
             var panel = CreateSeatPanel(parent, $"Final Prompt Panel {player.Id}", player.SeatIndex,
-                new Vector2(430f, 245f), Color.Lerp(player.Color, Color.black, 0.30f));
+                PromptSeatPanelSize, Color.Lerp(player.Color, Color.black, 0.30f));
 
             var draft = HandwritingAnswer.Blank();
             CreateText(panel.transform, player.DisplayName, 20, Color.white, TextAnchor.MiddleCenter,
-                FontStyle.Bold, new Vector2(0f, 99f), new Vector2(360f, 30f));
-            CreateText(panel.transform, finalAnswer.Prompt.text, 20, Color.white, TextAnchor.MiddleCenter,
-                FontStyle.Bold, new Vector2(0f, 34f), new Vector2(370f, 100f));
+                FontStyle.Bold, new Vector2(0f, 84f), new Vector2(360f, 28f));
+            var status = CreateText(panel.transform, "Final answer", 17, mutedTextColor, TextAnchor.MiddleCenter,
+                FontStyle.Bold, new Vector2(0f, 58f), new Vector2(360f, 24f));
 
             Button submitButton = null;
             Button clearButton = null;
             var paperInput = CreateHandwritingPaper(panel.transform, $"Final Paper {player.Id}",
-                new Vector2(0f, -42f), new Vector2(360f, 78f), true, null, value =>
+                new Vector2(0f, -8f), new Vector2(352f, 98f), true, null, value =>
             {
                 draft = value ?? HandwritingAnswer.Blank();
                 var hasInk = draft.HasInk;
@@ -512,7 +519,7 @@ namespace TableLaughs
             {
                 paperInput.Clear();
                 soundHooks?.Play(SfxCue.Tap);
-            }, paperColor, new Vector2(-93f, -101f), new Vector2(170f, 38f), 16);
+            }, paperColor, new Vector2(-90f, -84f), new Vector2(164f, 38f), 16);
             clearButton = clear.Button;
 
             var submit = CreateButton(panel.transform, "Submit", () =>
@@ -532,8 +539,9 @@ namespace TableLaughs
                 paperInput.SetInputEnabled(false);
                 clearButton.interactable = false;
                 submitButton.interactable = false;
+                status.text = "Submitted";
                 soundHooks?.Play(SfxCue.Tap);
-            }, accentColor, new Vector2(93f, -101f), new Vector2(170f, 38f), 16);
+            }, accentColor, new Vector2(90f, -84f), new Vector2(164f, 38f), 16);
             submitButton = submit.Button;
             submitButton.interactable = false;
             clearButton.interactable = false;
@@ -546,17 +554,17 @@ namespace TableLaughs
             Func<PlayerData, int, bool> onVote)
         {
             var panel = CreateSeatPanel(parent, $"Round Vote Panel {player.Id}", player.SeatIndex,
-                new Vector2(410f, 178f), Color.Lerp(player.Color, Color.black, 0.35f));
+                VoteSeatPanelSize, Color.Lerp(player.Color, Color.black, 0.35f));
             CreateText(panel.transform, player.DisplayName, 19, Color.white, TextAnchor.MiddleCenter,
-                FontStyle.Bold, new Vector2(0f, 64f), new Vector2(330f, 30f));
+                FontStyle.Bold, new Vector2(0f, 55f), new Vector2(330f, 28f));
             var status = CreateText(panel.transform, "Vote", 17, mutedTextColor, TextAnchor.MiddleCenter,
-                FontStyle.Bold, new Vector2(0f, 39f), new Vector2(330f, 24f));
+                FontStyle.Bold, new Vector2(0f, 31f), new Vector2(330f, 22f));
 
-            var gridObject = CreatePanel(panel.transform, "Vote Number Grid", new Vector2(0f, -25f),
-                new Vector2(330f, 105f), new Color(0f, 0f, 0f, 0f), 0f);
+            var gridObject = CreatePanel(panel.transform, "Vote Number Grid", new Vector2(0f, -26f),
+                new Vector2(310f, 84f), new Color(0f, 0f, 0f, 0f), 0f);
             var grid = gridObject.AddComponent<GridLayoutGroup>();
-            grid.cellSize = new Vector2(70f, 42f);
-            grid.spacing = new Vector2(8f, 8f);
+            grid.cellSize = new Vector2(70f, 38f);
+            grid.spacing = new Vector2(6f, 6f);
             grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
             grid.constraintCount = 4;
             grid.childAlignment = TextAnchor.MiddleCenter;
@@ -591,17 +599,17 @@ namespace TableLaughs
             Func<PlayerData, int, bool> onVote)
         {
             var panel = CreateSeatPanel(parent, $"Final Vote Panel {player.Id}", player.SeatIndex,
-                new Vector2(410f, 178f), Color.Lerp(player.Color, Color.black, 0.35f));
+                VoteSeatPanelSize, Color.Lerp(player.Color, Color.black, 0.35f));
             CreateText(panel.transform, player.DisplayName, 19, Color.white, TextAnchor.MiddleCenter,
-                FontStyle.Bold, new Vector2(0f, 64f), new Vector2(330f, 30f));
+                FontStyle.Bold, new Vector2(0f, 55f), new Vector2(330f, 28f));
             var status = CreateText(panel.transform, "Vote", 17, mutedTextColor, TextAnchor.MiddleCenter,
-                FontStyle.Bold, new Vector2(0f, 39f), new Vector2(330f, 24f));
+                FontStyle.Bold, new Vector2(0f, 31f), new Vector2(330f, 22f));
 
-            var gridObject = CreatePanel(panel.transform, "Vote Number Grid", new Vector2(0f, -25f),
-                new Vector2(330f, 105f), new Color(0f, 0f, 0f, 0f), 0f);
+            var gridObject = CreatePanel(panel.transform, "Vote Number Grid", new Vector2(0f, -26f),
+                new Vector2(310f, 84f), new Color(0f, 0f, 0f, 0f), 0f);
             var grid = gridObject.AddComponent<GridLayoutGroup>();
-            grid.cellSize = new Vector2(70f, 42f);
-            grid.spacing = new Vector2(8f, 8f);
+            grid.cellSize = new Vector2(70f, 38f);
+            grid.spacing = new Vector2(6f, 6f);
             grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
             grid.constraintCount = 4;
             grid.childAlignment = TextAnchor.MiddleCenter;
@@ -633,7 +641,6 @@ namespace TableLaughs
             if (state.CurrentIndex >= state.Slots.Count)
             {
                 state.ProgressLabel.text = "All set";
-                state.PromptLabel.text = "Ready for voting";
                 state.PaperInput.SetAnswer(HandwritingAnswer.Blank());
                 state.PaperInput.SetInputEnabled(false);
                 state.SubmitButton.interactable = false;
@@ -641,12 +648,10 @@ namespace TableLaughs
                 return;
             }
 
-            var slot = state.ActiveSlot;
             state.DraftAnswer = HandwritingAnswer.Blank();
             state.ProgressLabel.text = state.Slots.Count == 1
                 ? "Prompt"
                 : $"Prompt {state.CurrentIndex + 1}/{state.Slots.Count}";
-            state.PromptLabel.text = slot.Prompt.text;
             state.PaperInput.SetAnswer(HandwritingAnswer.Blank());
             state.PaperInput.SetInputEnabled(true);
             state.SubmitButton.interactable = false;
@@ -668,15 +673,86 @@ namespace TableLaughs
 
         private void CreateRoundHeader(Transform parent, string leftText, string centerText, float timeLimit)
         {
-            CreateText(parent, leftText, 32, accentColor, TextAnchor.MiddleLeft, FontStyle.Bold,
-                new Vector2(-760f, 500f), new Vector2(360f, 54f));
-            CreateText(parent, centerText, 34, textColor, TextAnchor.MiddleCenter, FontStyle.Bold,
-                new Vector2(0f, 500f), new Vector2(800f, 54f));
+            var statusPanel = CreatePanel(parent, "Round Status", RoundStatusPosition, RoundStatusSize,
+                panelColor, 0f);
+            CreateText(statusPanel.transform, leftText, 26, accentColor, TextAnchor.MiddleLeft, FontStyle.Bold,
+                new Vector2(-410f, 0f), new Vector2(280f, 44f));
+            CreateText(statusPanel.transform, centerText, 27, textColor, TextAnchor.MiddleCenter, FontStyle.Bold,
+                new Vector2(0f, 0f), new Vector2(610f, 44f));
 
-            var timerPanel = CreatePanel(parent, "Timer", new Vector2(800f, 500f), new Vector2(120f, 64f),
+            var timerPanel = CreatePanel(statusPanel.transform, "Timer", new Vector2(512f, 0f), new Vector2(96f, 46f),
                 Color.Lerp(accentColor, Color.black, 0.20f), 0f);
-            timerText = CreateText(timerPanel.transform, Mathf.CeilToInt(timeLimit).ToString(), 34, Color.black,
-                TextAnchor.MiddleCenter, FontStyle.Bold, Vector2.zero, new Vector2(112f, 58f));
+            timerText = CreateText(timerPanel.transform, Mathf.CeilToInt(timeLimit).ToString(), 28, Color.black,
+                TextAnchor.MiddleCenter, FontStyle.Bold, Vector2.zero, new Vector2(88f, 40f));
+        }
+
+        private void CreateCenterPromptCard(
+            Transform parent,
+            string promptText,
+            string label,
+            Vector2 position,
+            Vector2 size,
+            int promptFontSize)
+        {
+            var card = CreatePanel(parent, "Center Prompt Card", position, size, panelColor, 0f);
+            var labelHeight = size.y > 120f ? 30f : 22f;
+            var verticalPadding = size.y > 120f ? 20f : 10f;
+            var promptHeight = size.y - labelHeight - verticalPadding * 2f;
+            var labelY = size.y * 0.5f - verticalPadding - labelHeight * 0.5f;
+            var promptY = -size.y * 0.5f + verticalPadding + promptHeight * 0.5f;
+
+            CreateText(card.transform, label, size.y > 120f ? 21 : 17, secondAccentColor,
+                TextAnchor.MiddleCenter, FontStyle.Bold, new Vector2(0f, labelY),
+                new Vector2(size.x - 96f, labelHeight));
+            CreateText(card.transform, promptText, promptFontSize, textColor, TextAnchor.MiddleCenter,
+                FontStyle.Bold, new Vector2(0f, promptY), new Vector2(size.x - 96f, promptHeight));
+        }
+
+        private GameObject CreateAnswerGrid(Transform parent, string name, int answerCount, out Vector2 cellSize)
+        {
+            var answerGrid = CreatePanel(parent, name, AnswerGridPosition, AnswerGridSize,
+                new Color(0f, 0f, 0f, 0f), 0f);
+            var grid = answerGrid.AddComponent<GridLayoutGroup>();
+            cellSize = ConfigureAnswerGrid(grid, answerCount);
+            return answerGrid;
+        }
+
+        private static Vector2 ConfigureAnswerGrid(GridLayoutGroup grid, int answerCount)
+        {
+            var columns = answerCount <= 3
+                ? Mathf.Max(1, answerCount)
+                : answerCount == 4
+                    ? 2
+                    : 3;
+            var cellSize = answerCount <= 3
+                ? new Vector2(350f, 160f)
+                : answerCount == 4
+                    ? new Vector2(430f, 150f)
+                    : new Vector2(350f, 132f);
+
+            grid.cellSize = cellSize;
+            grid.spacing = new Vector2(20f, 20f);
+            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            grid.constraintCount = columns;
+            grid.childAlignment = TextAnchor.MiddleCenter;
+            return cellSize;
+        }
+
+        private void AddAnswerCardContent(
+            Transform card,
+            int displayNumber,
+            string fallbackText,
+            HandwritingAnswer handwriting,
+            Vector2 cellSize)
+        {
+            var badgePosition = new Vector2(-cellSize.x * 0.5f + 32f, cellSize.y * 0.5f - 30f);
+            var previewSize = new Vector2(cellSize.x - 92f, cellSize.y - 42f);
+            var strokeThickness = Mathf.Clamp(cellSize.y / 18f, 6f, 8f);
+
+            CreateText(card, displayNumber.ToString(), 22, Color.black, TextAnchor.MiddleCenter,
+                FontStyle.Bold, badgePosition, new Vector2(38f, 38f), accentColor);
+            CreateAnswerPreview(card, fallbackText, handwriting, new Vector2(28f, 0f), previewSize,
+                strokeThickness, 28);
         }
 
         private void CreateAnswerPreview(
@@ -685,7 +761,8 @@ namespace TableLaughs
             HandwritingAnswer handwriting,
             Vector2 position,
             Vector2 size,
-            float strokeThickness)
+            float strokeThickness,
+            int textFontSize = 31)
         {
             if (handwriting != null && handwriting.HasInk)
             {
@@ -693,7 +770,7 @@ namespace TableLaughs
                 return;
             }
 
-            CreateText(parent, fallbackText, 31, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold, position, size);
+            CreateText(parent, fallbackText, textFontSize, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold, position, size);
         }
 
         private HandwritingPaperInput CreateHandwritingPaper(
@@ -1050,12 +1127,10 @@ namespace TableLaughs
 
         private sealed class PromptPanelState
         {
-            public PlayerData Player;
             public List<AnswerSlot> Slots;
             public int CurrentIndex;
             public HandwritingAnswer DraftAnswer = HandwritingAnswer.Blank();
             public Text ProgressLabel;
-            public Text PromptLabel;
             public HandwritingPaperInput PaperInput;
             public Button SubmitButton;
             public Button ClearButton;
