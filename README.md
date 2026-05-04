@@ -24,7 +24,9 @@ If the scene is missing, run `Table Laughs > Create Playable Scene` from Unity's
 ## Board Notes
 
 - The UI is built around a landscape tabletop layout: edge panels face each side and the center is the shared reveal area.
-- `BoardUIInputModule` is added at runtime through `BoardInputBridge`; in Editor, an `InputSystemUIInputModule` is added as a mouse fallback while keeping Board's required new Input System project setting.
+- `BoardUIInputModule` is added at runtime through `BoardInputBridge`; in Editor, an `InputSystemUIInputModule` is added as a mouse/touch/pen fallback while keeping Board's required new Input System project setting.
+- Stylus input is supported as touch-equivalent handwriting input. The current Board SDK contact API exposes `Finger`, `Glyph`, and `Blob`, so pressure, eraser, hover, and pen-only routing are not part of this version.
+- In Editor or development builds, enable `Log Board Contacts` on `BoardInputBridge` to confirm whether Board hardware reports a stylus as a `Finger`, `Blob`, or another supported contact path.
 - No phones, accounts, networking, backend, or physical pieces are required for v1.
 - TODO comments mark where future Board SDK integrations can map `BoardInput.GetActiveContacts(...)` to richer seat routing, read Board profile names from `BoardSession.players`, or persist custom prompt packs with `BoardSaveGameManager`.
 
@@ -51,4 +53,4 @@ Add more entries to `prompts`, `finalPrompts`, or `randomAnswers`. Keep prompt c
 - `VoteManager`: vote eligibility and vote capture.
 - `ScoreManager`: points and sweep bonuses.
 - `UIManager`: runtime tabletop UI, handwriting paper, voting panels, reveal screens.
-- `HandwritingPaperInput`: per-player finger-drawn answer capture and replay.
+- `HandwritingPaperInput`: per-player touch/stylus-drawn answer capture and replay.
