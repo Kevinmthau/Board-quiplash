@@ -429,12 +429,14 @@ namespace TableLaughs
             };
 
             CreateText(panel.transform, player.DisplayName, 20, Color.white, TextAnchor.MiddleCenter,
-                FontStyle.Bold, new Vector2(0f, 84f), new Vector2(360f, 28f));
+                FontStyle.Bold, new Vector2(0f, 97f), new Vector2(360f, 22f));
             state.ProgressLabel = CreateText(panel.transform, string.Empty, 17, mutedTextColor,
-                TextAnchor.MiddleCenter, FontStyle.Bold, new Vector2(0f, 58f), new Vector2(360f, 24f));
+                TextAnchor.MiddleCenter, FontStyle.Bold, new Vector2(0f, 76f), new Vector2(360f, 18f));
+            state.PromptLabel = CreateText(panel.transform, string.Empty, 19, Color.white,
+                TextAnchor.MiddleCenter, FontStyle.Bold, new Vector2(0f, 36f), new Vector2(370f, 56f));
 
             state.PaperInput = CreateHandwritingPaper(panel.transform, $"Paper {player.Id}",
-                new Vector2(0f, -8f), new Vector2(352f, 98f), true, null, value =>
+                new Vector2(0f, -30f), new Vector2(352f, 70f), true, null, value =>
             {
                 state.DraftAnswer = value;
                 var hasInk = value != null && value.HasInk;
@@ -453,7 +455,7 @@ namespace TableLaughs
             {
                 state.PaperInput.Clear();
                 soundHooks?.Play(SfxCue.Tap);
-            }, paperColor, new Vector2(-90f, -84f), new Vector2(164f, 38f), 16);
+            }, paperColor, new Vector2(-90f, -90f), new Vector2(164f, 38f), 16);
             state.ClearButton = clearButton.Button;
 
             var submitButton = CreateButton(panel.transform, "Submit", () =>
@@ -475,7 +477,7 @@ namespace TableLaughs
                 state.DraftAnswer = HandwritingAnswer.Blank();
                 RefreshPromptState(state);
                 soundHooks?.Play(SfxCue.Tap);
-            }, accentColor, new Vector2(90f, -84f), new Vector2(164f, 38f), 16);
+            }, accentColor, new Vector2(90f, -90f), new Vector2(164f, 38f), 16);
             state.SubmitButton = submitButton.Button;
 
             RefreshPromptState(state);
@@ -493,14 +495,16 @@ namespace TableLaughs
 
             var draft = HandwritingAnswer.Blank();
             CreateText(panel.transform, player.DisplayName, 20, Color.white, TextAnchor.MiddleCenter,
-                FontStyle.Bold, new Vector2(0f, 84f), new Vector2(360f, 28f));
+                FontStyle.Bold, new Vector2(0f, 97f), new Vector2(360f, 22f));
             var status = CreateText(panel.transform, "Final answer", 17, mutedTextColor, TextAnchor.MiddleCenter,
-                FontStyle.Bold, new Vector2(0f, 58f), new Vector2(360f, 24f));
+                FontStyle.Bold, new Vector2(0f, 76f), new Vector2(360f, 18f));
+            CreateText(panel.transform, finalAnswer.Prompt.text, 19, Color.white, TextAnchor.MiddleCenter,
+                FontStyle.Bold, new Vector2(0f, 36f), new Vector2(370f, 56f));
 
             Button submitButton = null;
             Button clearButton = null;
             var paperInput = CreateHandwritingPaper(panel.transform, $"Final Paper {player.Id}",
-                new Vector2(0f, -8f), new Vector2(352f, 98f), true, null, value =>
+                new Vector2(0f, -30f), new Vector2(352f, 70f), true, null, value =>
             {
                 draft = value ?? HandwritingAnswer.Blank();
                 var hasInk = draft.HasInk;
@@ -519,7 +523,7 @@ namespace TableLaughs
             {
                 paperInput.Clear();
                 soundHooks?.Play(SfxCue.Tap);
-            }, paperColor, new Vector2(-90f, -84f), new Vector2(164f, 38f), 16);
+            }, paperColor, new Vector2(-90f, -90f), new Vector2(164f, 38f), 16);
             clearButton = clear.Button;
 
             var submit = CreateButton(panel.transform, "Submit", () =>
@@ -541,7 +545,7 @@ namespace TableLaughs
                 submitButton.interactable = false;
                 status.text = "Submitted";
                 soundHooks?.Play(SfxCue.Tap);
-            }, accentColor, new Vector2(90f, -84f), new Vector2(164f, 38f), 16);
+            }, accentColor, new Vector2(90f, -90f), new Vector2(164f, 38f), 16);
             submitButton = submit.Button;
             submitButton.interactable = false;
             clearButton.interactable = false;
@@ -641,6 +645,7 @@ namespace TableLaughs
             if (state.CurrentIndex >= state.Slots.Count)
             {
                 state.ProgressLabel.text = "All set";
+                state.PromptLabel.text = "Ready for voting";
                 state.PaperInput.SetAnswer(HandwritingAnswer.Blank());
                 state.PaperInput.SetInputEnabled(false);
                 state.SubmitButton.interactable = false;
@@ -652,6 +657,7 @@ namespace TableLaughs
             state.ProgressLabel.text = state.Slots.Count == 1
                 ? "Prompt"
                 : $"Prompt {state.CurrentIndex + 1}/{state.Slots.Count}";
+            state.PromptLabel.text = state.ActiveSlot.Prompt.text;
             state.PaperInput.SetAnswer(HandwritingAnswer.Blank());
             state.PaperInput.SetInputEnabled(true);
             state.SubmitButton.interactable = false;
@@ -1131,6 +1137,7 @@ namespace TableLaughs
             public int CurrentIndex;
             public HandwritingAnswer DraftAnswer = HandwritingAnswer.Blank();
             public Text ProgressLabel;
+            public Text PromptLabel;
             public HandwritingPaperInput PaperInput;
             public Button SubmitButton;
             public Button ClearButton;
