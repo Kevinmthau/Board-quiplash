@@ -123,7 +123,6 @@ namespace TableLaughs
                 return;
             }
 
-            nextBoardContactLogTime = Time.unscaledTime + boardContactLogIntervalSeconds;
             var fingers = BoardInput.GetActiveContacts(BoardContactType.Finger);
             var blobs = BoardInput.GetActiveContacts(BoardContactType.Blob);
             var glyphs = BoardInput.GetActiveContacts(BoardContactType.Glyph);
@@ -133,6 +132,7 @@ namespace TableLaughs
                 return;
             }
 
+            nextBoardContactLogTime = Time.unscaledTime + boardContactLogIntervalSeconds;
             boardContactLogBuilder.Clear();
             boardContactLogBuilder.Append("[Table Laughs] Board contacts");
             AppendContactSummary("Finger", fingers);
