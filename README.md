@@ -1,56 +1,54 @@
 # Table Laughs
 
-Table Laughs is an original Board-native local party game prototype for 3 to 6 players. Players join from seats around the Board, write family-friendly joke answers, vote from their own edge panels, and play through three fast rounds.
+Table Laughs is now implemented as a Board Web SDK local party game for 3 to 6 players. Players join from seats around the table, draw answers on per-seat paper panels, vote from their own seat controls, and play through three rounds with sweep bonuses and a final winner screen.
 
-## Run in Unity Editor
+## Run The Board Web Version
 
-1. Open this folder in Unity `6000.4.2f1`.
-2. Open `Assets/Scenes/TableLaughs.unity`.
-3. Press Play.
-4. Click `Start`, then tap at least three edge seats to join.
+```bash
+cd board-websdk/example
+npm install
+npm run dev
+```
 
-If the scene is missing, run `Table Laughs > Create Playable Scene` from Unity's menu. The editor setup utility creates the scene and puts it in Build Settings.
+The browser preview is playable for layout and game-loop work. Board APIs are guarded behind `Board.isOnDevice`, so the same bundle can run off-device and inside the Board WebView.
+
+## Build For Board Or Harness
+
+```bash
+cd board-websdk/example
+npm run build
+cd ../sample
+./gradlew assembleDebug
+```
+
+The harness expects the built output at `board-websdk/example/dist` and copies it into the APK assets. Java 17+ is required for the Android harness build.
 
 ## Game Loop
 
 1. Title screen.
-2. Player join screen with 6 edge seats. Each joined player can edit their name and cycle color.
-3. Rounds 1 and 2 give every player the same prompt. Players handwrite one answer on blank paper in their own seat-facing panels.
-4. The center of the Board reveals the shared prompt and every answer. Players vote from their seat panels, except for their own answer.
+2. Player join screen with 6 local seats and optional Board profile import on device.
+3. Rounds 1 and 2 use a shared prompt. Each player draws one answer on their own paper panel.
+4. The center table reveals all answers. Players vote from their own seat panel, except for their own answer.
 5. Votes award 100 points in Round 1 and 200 points in Round 2, with a sweep bonus if an answer gets every possible vote.
-6. Round 3 gives everyone the same final prompt. Players vote among all final answers, except their own.
-7. The winner screen shows the leaderboard, confetti, and a `Play Again` button.
+6. Round 3 uses a final prompt worth 300 points per vote.
+7. The winner screen shows the leaderboard and saves a compact snapshot through `Board.save` on device.
 
-## Board Notes
+## Board Web SDK Notes
 
-- The UI is built around a landscape tabletop layout: edge panels face each side and the center is the shared reveal area.
-- `BoardUIInputModule` is added at runtime through `BoardInputBridge`; in Editor, an `InputSystemUIInputModule` is added as a mouse/touch/pen fallback while keeping Board's required new Input System project setting.
-- Stylus input is supported as touch-equivalent handwriting input. The current Board SDK contact API exposes `Finger`, `Glyph`, and `Blob`, so pressure, eraser, hover, and pen-only routing are not part of this version.
-- In Editor or development builds, enable `Log Board Contacts` on `BoardInputBridge` to confirm whether Board hardware reports a stylus as a `Finger`, `Blob`, or another supported contact path.
-- No phones, accounts, networking, backend, or physical pieces are required for v1.
-- TODO comments mark where future Board SDK integrations can map `BoardInput.GetActiveContacts(...)` to richer seat routing, read Board profile names from `BoardSession.players`, or persist custom prompt packs with `BoardSaveGameManager`.
-
-## Android Build
-
-The editor utility includes `TableLaughs.EditorTools.TableLaughsProjectSetup.BuildAndroidApk`, which writes `/tmp/table-laughs/TableLaughs.apk` by default.
-
-Board SDK builds require a Piece Set Model even though this v1 does not use physical pieces. Configure it in `Project Settings > Board > Input Settings` before building for hardware.
+- `Board.isOnDevice` gates all bridge-backed API calls.
+- `Board.session` is used for Board profile names and guest add/remove where available.
+- `Board.input.subscribe` reads touch and piece contacts for live device status.
+- `Board.pause.setContext` configures restart, save-and-quit, and audio sliders.
+- `Board.save` creates or updates a small game snapshot on save-and-quit and at the winner screen.
 
 ## Prompt Packs
 
-Prompts live in:
+Prompts are served by the web app from:
 
-`Assets/Resources/Prompts/table_laughs_prompts.json`
+`board-websdk/example/public/prompts/table_laughs_prompts.json`
 
-Add more entries to `prompts`, `finalPrompts`, or `randomAnswers`. Keep prompt copy original and safe by default.
+The original Unity prompt pack remains at `Assets/Resources/Prompts/table_laughs_prompts.json` for reference.
 
-## Main Scripts
+## Legacy Unity Project
 
-- `GameManager`: high-level phase and coroutine flow.
-- `PlayerManager`: local players, seats, names, colors, leaderboard.
-- `PromptManager`: JSON prompt loading and random fallback answers.
-- `RoundManager`: shared prompt creation, final prompt setup, answer submission.
-- `VoteManager`: vote eligibility and vote capture.
-- `ScoreManager`: points and sweep bonuses.
-- `UIManager`: runtime tabletop UI, handwriting paper, voting panels, reveal screens.
-- `HandwritingPaperInput`: per-player touch/stylus-drawn answer capture and replay.
+The Unity implementation is still present in `Assets/`, `Packages/`, and `ProjectSettings/`, but the active version is the Board Web SDK app under `board-websdk/example`.
