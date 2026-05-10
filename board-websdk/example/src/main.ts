@@ -280,7 +280,12 @@ class TableLaughsGame {
     }
 
     for (const boardPlayer of boardPlayers) {
-      if (this.players.some((player) => player.boardPlayerId === boardPlayer.playerId)) {
+      if (
+        this.players.some(
+          (player) =>
+            player.boardPlayerId === boardPlayer.playerId || player.boardSessionId === boardPlayer.sessionId,
+        )
+      ) {
         continue;
       }
 

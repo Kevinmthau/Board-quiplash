@@ -116,8 +116,11 @@ export const input = {
     /** Remove a previously registered callback. */
     unsubscribe(callback) {
         frameCallbacks = frameCallbacks.filter((cb) => cb !== callback);
-        if (frameCallbacks.length === 0 && subscribed && window.boardTouch) {
-            window.boardTouch.postMessage("unsubscribe");
+        if (frameCallbacks.length === 0) {
+            if (subscribed && window.boardTouch) {
+                window.boardTouch.postMessage("unsubscribe");
+            }
+            contactState.clear();
             subscribed = false;
         }
     },
@@ -127,12 +130,18 @@ export const input = {
      * If the push channel is not subscribed, returns an empty array.
      */
     getContacts() {
+        if (!subscribed) {
+            return [];
+        }
         return Array.from(contactState.values());
     },
     /**
      * Get contacts filtered by type.
      */
     getContactsByType(type) {
+        if (!subscribed) {
+            return [];
+        }
         return Array.from(contactState.values()).filter((c) => c.type === type);
     },
     /** Whether the push channel is active. */
