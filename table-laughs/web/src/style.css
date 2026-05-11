@@ -193,6 +193,11 @@ button:disabled {
   min-height: 190px;
 }
 
+.join-open {
+  --seat-side-depth-half: 95px;
+  min-height: 190px;
+}
+
 .prompt-seat {
   --seat-side-depth-half: 103px;
   min-height: 206px;
@@ -315,6 +320,21 @@ button:disabled {
   color: #fff9e9;
 }
 
+.seat-join-options {
+  display: grid;
+  gap: 8px;
+}
+
+.seat-join-options .seat-join-button {
+  min-height: 62px;
+}
+
+.seat-board-button {
+  border-style: solid;
+  background: #f8d96e;
+  color: #202726;
+}
+
 .seat-join-button span {
   color: rgba(255, 249, 233, 0.68);
   font-size: 12px;
@@ -322,9 +342,21 @@ button:disabled {
   text-transform: uppercase;
 }
 
+.seat-board-button span {
+  color: rgba(32, 39, 38, 0.66);
+}
+
 .seat-join-button strong {
   color: #f8d96e;
   font-size: 26px;
+}
+
+.seat-join-options .seat-join-button strong {
+  font-size: 20px;
+}
+
+.seat-board-button strong {
+  color: #202726;
 }
 
 .name-writer {
@@ -781,6 +813,11 @@ h2 {
   }
 
   .join-player {
+    --seat-side-depth-half: 88px;
+    min-height: 176px;
+  }
+
+  .join-open {
     --seat-side-depth-half: 88px;
     min-height: 176px;
   }

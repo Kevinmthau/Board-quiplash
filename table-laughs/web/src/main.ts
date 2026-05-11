@@ -273,71 +273,85 @@ class TableLaughsGame {
     }
   }
 
-  private importBoardSessionPlayers(): boolean {
+  private importBoardSessionPlayers(preferredSeatIndex?: number): boolean {
     if (!Board.isOnDevice) {
       return false;
     }
 
-    let boardPlayers: BoardPlayer[] = [];
-    try {
-      boardPlayers = Board.session.getPlayers();
-    } catch (error) {
-      console.warn("Could not read Board session players.", error);
+    const boardPlayers = this.readBoardSessionPlayers();
+    if (!boardPlayers) {
       return false;
     }
 
     let changed = false;
     for (const boardPlayer of boardPlayers) {
-      const existing = this.players.find(
-        (player) =>
-          player.boardPlayerId === boardPlayer.playerId || player.boardSessionId === boardPlayer.sessionId,
-      );
-      if (existing) {
-        const nextName = this.nameFromBoardPlayer(boardPlayer, existing.id);
-        if (
-          existing.displayName !== nextName ||
-          existing.boardSessionId !== boardPlayer.sessionId ||
-          existing.boardPlayerId !== boardPlayer.playerId ||
-          existing.boardPlayerType !== boardPlayer.type ||
-          existing.avatarId !== boardPlayer.avatarId
-        ) {
-          existing.displayName = nextName;
-          existing.boardSessionId = boardPlayer.sessionId;
-          existing.boardPlayerId = boardPlayer.playerId;
-          existing.boardPlayerType = boardPlayer.type;
-          existing.avatarId = boardPlayer.avatarId;
-          if (this.isBoardProfile(existing)) {
-            existing.nameInk = undefined;
-            existing.nameInkConfirmed = true;
-          }
-          changed = true;
-        }
-        continue;
-      }
-
-      const seatIndex = this.firstOpenSeat();
-      if (seatIndex < 0) {
+      const imported = this.importBoardPlayer(boardPlayer, preferredSeatIndex);
+      if (!imported && !this.findBoardPlayer(boardPlayer)) {
         return changed;
       }
-
-      const id = this.nextPlayerId;
-      this.players.push({
-        id,
-        seatIndex,
-        displayName: this.nameFromBoardPlayer(boardPlayer, id),
-        color: PLAYER_COLORS[(id - 1) % PLAYER_COLORS.length],
-        score: 0,
-        boardSessionId: boardPlayer.sessionId,
-        boardPlayerId: boardPlayer.playerId,
-        boardPlayerType: boardPlayer.type,
-        avatarId: boardPlayer.avatarId,
-        nameInkConfirmed: String(boardPlayer.type) === "profile",
-      });
-      this.nextPlayerId += 1;
-      changed = true;
+      changed = changed || imported;
     }
 
     return changed;
+  }
+
+  private importBoardPlayer(boardPlayer: BoardPlayer, preferredSeatIndex?: number): boolean {
+    const existing = this.findBoardPlayer(boardPlayer);
+    if (existing) {
+      return this.updateBoardPlayer(existing, boardPlayer);
+    }
+
+    const seatIndex = this.firstOpenSeat(preferredSeatIndex);
+    if (seatIndex < 0) {
+      return false;
+    }
+
+    const id = this.nextPlayerId;
+    this.players.push({
+      id,
+      seatIndex,
+      displayName: this.nameFromBoardPlayer(boardPlayer, id),
+      color: PLAYER_COLORS[(id - 1) % PLAYER_COLORS.length],
+      score: 0,
+      boardSessionId: boardPlayer.sessionId,
+      boardPlayerId: boardPlayer.playerId,
+      boardPlayerType: boardPlayer.type,
+      avatarId: boardPlayer.avatarId,
+      nameInkConfirmed: String(boardPlayer.type) === "profile",
+    });
+    this.nextPlayerId += 1;
+    return true;
+  }
+
+  private updateBoardPlayer(player: PlayerData, boardPlayer: BoardPlayer): boolean {
+    const nextName = this.nameFromBoardPlayer(boardPlayer, player.id);
+    if (
+      player.displayName === nextName &&
+      player.boardSessionId === boardPlayer.sessionId &&
+      player.boardPlayerId === boardPlayer.playerId &&
+      player.boardPlayerType === boardPlayer.type &&
+      player.avatarId === boardPlayer.avatarId
+    ) {
+      return false;
+    }
+
+    player.displayName = nextName;
+    player.boardSessionId = boardPlayer.sessionId;
+    player.boardPlayerId = boardPlayer.playerId;
+    player.boardPlayerType = boardPlayer.type;
+    player.avatarId = boardPlayer.avatarId;
+    if (this.isBoardProfile(player)) {
+      player.nameInk = undefined;
+      player.nameInkConfirmed = true;
+    }
+    return true;
+  }
+
+  private findBoardPlayer(boardPlayer: BoardPlayer): PlayerData | undefined {
+    return this.players.find(
+      (player) =>
+        player.boardPlayerId === boardPlayer.playerId || player.boardSessionId === boardPlayer.sessionId,
+    );
   }
 
   private showTitle(): void {
@@ -379,12 +393,7 @@ class TableLaughsGame {
     const needed = Math.max(0, MIN_PLAYERS - this.players.length);
     const statusText =
       needed === 0 ? "Ready when the table is" : `${needed} more player${needed === 1 ? "" : "s"} needed`;
-    const boardActions = Board.isOnDevice
-      ? `
-        <button class="secondary-command" id="add-board-player" type="button">Add Board Player</button>
-        <button class="secondary-command" id="profile-switcher" type="button">Profiles</button>
-      `
-      : `<span class="status-pill">Browser preview</span>`;
+    const boardActions = Board.isOnDevice ? "" : `<span class="status-pill">Browser preview</span>`;
 
     this.root.innerHTML = this.renderShell({
       className: "join",
@@ -406,19 +415,13 @@ class TableLaughsGame {
     });
 
     this.bindClick("begin-game", () => this.startGame());
-    this.bindClick("add-board-player", () => void this.addBoardPlayer());
-    this.bindClick("profile-switcher", () => {
-      if (Board.isOnDevice) {
-        Board.session.showProfileSwitcher();
-        this.startProfileSwitcherSync();
-      }
-    });
 
     for (let seatIndex = 0; seatIndex < MAX_PLAYERS; seatIndex += 1) {
       this.bindClick(`join-seat-${seatIndex}`, () => {
         this.joinSeat(seatIndex);
         this.showJoin();
       });
+      this.bindClick(`board-seat-${seatIndex}`, () => void this.addBoardPlayer(seatIndex));
     }
 
     for (const player of this.players) {
@@ -436,21 +439,99 @@ class TableLaughsGame {
     this.drawNamePreviews();
   }
 
-  private async addBoardPlayer(): Promise<void> {
-    if (!Board.isOnDevice) {
+  private async addBoardPlayer(seatIndex: number): Promise<void> {
+    if (!Board.isOnDevice || !this.isOpenSeat(seatIndex) || this.players.length >= MAX_PLAYERS) {
       return;
     }
 
     try {
+      const previousActiveProfileId = this.readActiveBoardProfile()?.playerId;
+      const previousBoardPlayerKeys = this.boardSessionPlayerKeys();
       await Board.session.presentAddPlayer();
-      this.importBoardSessionPlayers();
-      this.showJoin();
+
+      if (this.importSelectedBoardPlayer(seatIndex, previousActiveProfileId, previousBoardPlayerKeys)) {
+        this.showJoin();
+        return;
+      }
+
+      this.startProfileSwitcherSync(seatIndex, previousActiveProfileId, previousBoardPlayerKeys);
     } catch (error) {
       console.warn("Add Board player failed.", error);
     }
   }
 
-  private startProfileSwitcherSync(): void {
+  private importSelectedBoardPlayer(
+    preferredSeatIndex: number,
+    previousActiveProfileId: string | undefined,
+    previousBoardPlayerKeys: Set<string> | undefined,
+  ): boolean {
+    const newProfile = previousBoardPlayerKeys
+      ? this.findNewBoardProfile(previousBoardPlayerKeys)
+      : undefined;
+    const activeProfile = this.readActiveBoardProfile();
+
+    return (
+      (newProfile !== undefined && this.importBoardPlayer(newProfile, preferredSeatIndex)) ||
+      this.importBoardSessionPlayers(preferredSeatIndex) ||
+      (activeProfile !== null &&
+        activeProfile.playerId !== previousActiveProfileId &&
+        this.importBoardPlayer(activeProfile, preferredSeatIndex))
+    );
+  }
+
+  private findNewBoardProfile(previousBoardPlayerKeys: Set<string>): BoardPlayer | undefined {
+    const boardPlayers = this.readBoardSessionPlayers();
+    if (!boardPlayers) {
+      return undefined;
+    }
+
+    return boardPlayers.find(
+      (boardPlayer) =>
+        String(boardPlayer.type) === "profile" &&
+        !previousBoardPlayerKeys.has(this.boardPlayerKey(boardPlayer)),
+    );
+  }
+
+  private readBoardSessionPlayers(): BoardPlayer[] | null {
+    if (!Board.isOnDevice) {
+      return null;
+    }
+
+    try {
+      return Board.session.getPlayers();
+    } catch (error) {
+      console.warn("Could not read Board session players.", error);
+      return null;
+    }
+  }
+
+  private boardSessionPlayerKeys(): Set<string> {
+    const boardPlayers = this.readBoardSessionPlayers();
+    return new Set(boardPlayers?.map((boardPlayer) => this.boardPlayerKey(boardPlayer)) ?? []);
+  }
+
+  private boardPlayerKey(boardPlayer: BoardPlayer): string {
+    return `${boardPlayer.playerId}:${boardPlayer.sessionId}:${String(boardPlayer.type)}`;
+  }
+
+  private readActiveBoardProfile(): BoardPlayer | null {
+    if (!Board.isOnDevice) {
+      return null;
+    }
+
+    try {
+      return Board.session.getActiveProfile();
+    } catch (error) {
+      console.warn("Could not read active Board profile.", error);
+      return null;
+    }
+  }
+
+  private startProfileSwitcherSync(
+    preferredSeatIndex?: number,
+    previousActiveProfileId?: string,
+    previousBoardPlayerKeys?: Set<string>,
+  ): void {
     this.stopProfileSwitcherSync();
 
     const syncPlayers = (): void => {
@@ -459,13 +540,34 @@ class TableLaughsGame {
         return;
       }
 
-      if (this.importBoardSessionPlayers()) {
+      if (preferredSeatIndex === undefined) {
+        if (this.importBoardSessionPlayers()) {
+          this.showJoin();
+        }
+        return;
+      }
+
+      if (this.importSelectedBoardPlayer(preferredSeatIndex, previousActiveProfileId, previousBoardPlayerKeys)) {
+        this.hideProfileSwitcher();
+        this.stopProfileSwitcherSync();
         this.showJoin();
       }
     };
 
     syncPlayers();
     this.profileSwitcherSyncTimerId = window.setInterval(syncPlayers, 500);
+  }
+
+  private hideProfileSwitcher(): void {
+    if (!Board.isOnDevice) {
+      return;
+    }
+
+    try {
+      Board.session.hideProfileSwitcher();
+    } catch (error) {
+      console.warn("Could not hide Board profile switcher.", error);
+    }
   }
 
   private stopProfileSwitcherSync(): void {
@@ -878,12 +980,7 @@ class TableLaughsGame {
         return this.renderSeatPanel(
           seatIndex,
           "join-open",
-          `
-            <button class="seat-join-button" id="join-seat-${seatIndex}" type="button">
-              <span>Seat ${seatIndex + 1}</span>
-              <strong>Join</strong>
-            </button>
-          `,
+          this.renderOpenSeatContents(seatIndex),
         );
       }
 
@@ -894,6 +991,23 @@ class TableLaughsGame {
         player,
       );
     }).join("");
+  }
+
+  private renderOpenSeatContents(seatIndex: number): string {
+    const boardDisabled = Board.isOnDevice ? "" : "disabled";
+    return `
+      <div class="seat-join-options">
+        <span class="seat-label">Seat ${seatIndex + 1}</span>
+        <button class="seat-join-button seat-board-button" id="board-seat-${seatIndex}" type="button" ${boardDisabled}>
+          <span>Add</span>
+          <strong>Board Player</strong>
+        </button>
+        <button class="seat-join-button" id="join-seat-${seatIndex}" type="button">
+          <span>Add</span>
+          <strong>Guest</strong>
+        </button>
+      </div>
+    `;
   }
 
   private renderJoinPlayerContents(player: PlayerData): string {
@@ -1211,9 +1325,13 @@ class TableLaughsGame {
     return this.players.find((player) => player.id === playerId);
   }
 
-  private firstOpenSeat(): number {
+  private firstOpenSeat(preferredSeatIndex?: number): number {
+    if (preferredSeatIndex !== undefined && this.isOpenSeat(preferredSeatIndex)) {
+      return preferredSeatIndex;
+    }
+
     for (let seatIndex = 0; seatIndex < MAX_PLAYERS; seatIndex += 1) {
-      if (!this.playerAtSeat(seatIndex)) {
+      if (this.isOpenSeat(seatIndex)) {
         return seatIndex;
       }
     }
@@ -1221,9 +1339,24 @@ class TableLaughsGame {
     return -1;
   }
 
+  private isOpenSeat(seatIndex: number | undefined): boolean {
+    return (
+      seatIndex !== undefined &&
+      seatIndex >= 0 &&
+      seatIndex < MAX_PLAYERS &&
+      !this.playerAtSeat(seatIndex)
+    );
+  }
+
   private nextGuestSessionId(): number {
     let sessionId = this.nextPlayerId;
-    while (this.players.some((player) => player.boardSessionId === sessionId)) {
+    const boardSessionIds = new Set(
+      this.readBoardSessionPlayers()?.map((player) => player.sessionId) ?? [],
+    );
+    while (
+      this.players.some((player) => player.boardSessionId === sessionId) ||
+      boardSessionIds.has(sessionId)
+    ) {
       sessionId += 1;
     }
 
