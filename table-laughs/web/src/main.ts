@@ -1250,6 +1250,7 @@ class InkPad {
   };
 
   private pointFromEvent(event: PointerEvent): InkPoint {
+    // Keep ink in the canvas-local frame; the seat panel may be CSS-rotated.
     const width = this.canvas.clientWidth || this.canvas.width;
     const height = this.canvas.clientHeight || this.canvas.height;
     const x = width === 0 ? 0 : event.offsetX / width;
