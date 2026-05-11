@@ -26,6 +26,7 @@ const PLAYER_COLORS = [
 ];
 
 type GamePhase = "title" | "join" | "prompt" | "vote" | "results" | "scoreboard" | "winner";
+type PlayerKind = BoardPlayer["type"] | "profile" | "guest";
 
 interface PromptEntry {
   id: string;
@@ -48,6 +49,10 @@ interface PlayerData {
   score: number;
   boardSessionId?: number;
   boardPlayerId?: string;
+  boardPlayerType?: PlayerKind;
+  avatarId?: string;
+  nameInk?: HandwritingAnswer;
+  nameInkConfirmed?: boolean;
 }
 
 interface InkPoint {
@@ -169,6 +174,7 @@ class TableLaughsGame {
   private readonly draftAnswers = new Map<number, HandwritingAnswer>();
   private readonly votedPlayerIds = new Set<number>();
   private readonly inkPads = new Map<number, InkPad>();
+  private readonly nameInkPads = new Map<number, InkPad>();
   private readonly startedAt = Date.now();
 
   private currentRound = 1;
@@ -266,9 +272,9 @@ class TableLaughsGame {
     }
   }
 
-  private importBoardSessionPlayers(): void {
+  private importBoardSessionPlayers(): boolean {
     if (!Board.isOnDevice) {
-      return;
+      return false;
     }
 
     let boardPlayers: BoardPlayer[] = [];
@@ -276,35 +282,61 @@ class TableLaughsGame {
       boardPlayers = Board.session.getPlayers();
     } catch (error) {
       console.warn("Could not read Board session players.", error);
-      return;
+      return false;
     }
 
+    let changed = false;
     for (const boardPlayer of boardPlayers) {
-      if (
-        this.players.some(
-          (player) =>
-            player.boardPlayerId === boardPlayer.playerId || player.boardSessionId === boardPlayer.sessionId,
-        )
-      ) {
+      const existing = this.players.find(
+        (player) =>
+          player.boardPlayerId === boardPlayer.playerId || player.boardSessionId === boardPlayer.sessionId,
+      );
+      if (existing) {
+        const nextName = this.nameFromBoardPlayer(boardPlayer, existing.id);
+        if (
+          existing.displayName !== nextName ||
+          existing.boardSessionId !== boardPlayer.sessionId ||
+          existing.boardPlayerId !== boardPlayer.playerId ||
+          existing.boardPlayerType !== boardPlayer.type ||
+          existing.avatarId !== boardPlayer.avatarId
+        ) {
+          existing.displayName = nextName;
+          existing.boardSessionId = boardPlayer.sessionId;
+          existing.boardPlayerId = boardPlayer.playerId;
+          existing.boardPlayerType = boardPlayer.type;
+          existing.avatarId = boardPlayer.avatarId;
+          if (this.isBoardProfile(existing)) {
+            existing.nameInk = undefined;
+            existing.nameInkConfirmed = true;
+          }
+          changed = true;
+        }
         continue;
       }
 
       const seatIndex = this.firstOpenSeat();
       if (seatIndex < 0) {
-        return;
+        return changed;
       }
 
+      const id = this.nextPlayerId;
       this.players.push({
-        id: this.nextPlayerId,
+        id,
         seatIndex,
-        displayName: boardPlayer.name || `Player ${this.nextPlayerId}`,
-        color: PLAYER_COLORS[(this.nextPlayerId - 1) % PLAYER_COLORS.length],
+        displayName: this.nameFromBoardPlayer(boardPlayer, id),
+        color: PLAYER_COLORS[(id - 1) % PLAYER_COLORS.length],
         score: 0,
         boardSessionId: boardPlayer.sessionId,
         boardPlayerId: boardPlayer.playerId,
+        boardPlayerType: boardPlayer.type,
+        avatarId: boardPlayer.avatarId,
+        nameInkConfirmed: String(boardPlayer.type) === "profile",
       });
       this.nextPlayerId += 1;
+      changed = true;
     }
+
+    return changed;
   }
 
   private showTitle(): void {
@@ -333,6 +365,7 @@ class TableLaughsGame {
   private beginJoin(): void {
     this.phase = "join";
     this.stopCountdown();
+    this.clearInputState();
     this.players.length = 0;
     this.nextPlayerId = 1;
     this.importBoardSessionPlayers();
@@ -341,6 +374,7 @@ class TableLaughsGame {
 
   private showJoin(): void {
     this.phase = "join";
+    this.clearNameInputState();
     const needed = Math.max(0, MIN_PLAYERS - this.players.length);
     const statusText =
       needed === 0 ? "Ready when the table is" : `${needed} more player${needed === 1 ? "" : "s"} needed`;
@@ -375,6 +409,11 @@ class TableLaughsGame {
     this.bindClick("profile-switcher", () => {
       if (Board.isOnDevice) {
         Board.session.showProfileSwitcher();
+        window.setTimeout(() => {
+          if (this.phase === "join" && this.importBoardSessionPlayers()) {
+            this.showJoin();
+          }
+        }, 800);
       }
     });
 
@@ -386,11 +425,6 @@ class TableLaughsGame {
     }
 
     for (const player of this.players) {
-      const nameInput = document.getElementById(`player-name-${player.id}`) as HTMLInputElement | null;
-      nameInput?.addEventListener("input", () => {
-        player.displayName = cleanName(nameInput.value, player.id);
-      });
-
       this.bindClick(`color-${player.id}`, () => {
         this.cyclePlayerColor(player);
         this.showJoin();
@@ -400,6 +434,9 @@ class TableLaughsGame {
         this.showJoin();
       });
     }
+
+    this.bindGuestNameInputs();
+    this.drawNamePreviews();
   }
 
   private async addBoardPlayer(): Promise<void> {
@@ -413,6 +450,47 @@ class TableLaughsGame {
       this.showJoin();
     } catch (error) {
       console.warn("Add Board player failed.", error);
+    }
+  }
+
+  private bindGuestNameInputs(): void {
+    for (const player of this.players) {
+      if (!this.needsGuestNameInk(player)) {
+        continue;
+      }
+
+      const canvas = document.getElementById(`name-ink-${player.id}`) as HTMLCanvasElement | null;
+      const clear = document.getElementById(`name-clear-${player.id}`) as HTMLButtonElement | null;
+      const skip = document.getElementById(`name-skip-${player.id}`) as HTMLButtonElement | null;
+      const done = document.getElementById(`name-done-${player.id}`) as HTMLButtonElement | null;
+      if (!canvas || !clear || !skip || !done) {
+        continue;
+      }
+
+      const pad = new InkPad(canvas, (answer) => {
+        player.nameInk = answer;
+        const hasInk = answerHasInk(answer);
+        clear.disabled = !hasInk;
+        done.disabled = !hasInk;
+      });
+      this.nameInkPads.set(player.id, pad);
+
+      clear.addEventListener("click", () => pad.clear());
+      skip.addEventListener("click", () => {
+        player.nameInk = undefined;
+        player.nameInkConfirmed = true;
+        this.showJoin();
+      });
+      done.addEventListener("click", () => {
+        const answer = pad.getAnswer();
+        if (!answerHasInk(answer)) {
+          return;
+        }
+
+        player.nameInk = answer;
+        player.nameInkConfirmed = true;
+        this.showJoin();
+      });
     }
   }
 
@@ -471,6 +549,7 @@ class TableLaughsGame {
 
     this.countdownEl = document.getElementById("countdown");
     this.bindPromptSeatInputs();
+    this.drawNamePreviews();
     this.startCountdown(timeLimit, () => this.completePromptEntry());
   }
 
@@ -526,6 +605,7 @@ class TableLaughsGame {
     if (panel) {
       panel.innerHTML = this.renderSubmittedSeat(slot);
       this.drawPreviews();
+      this.drawNamePreviews();
     }
 
     if (this.currentAnswers.every((candidate) => candidate.submitted)) {
@@ -583,6 +663,7 @@ class TableLaughsGame {
     this.countdownEl = document.getElementById("countdown");
     this.bindVoteButtons();
     this.drawPreviews();
+    this.drawNamePreviews();
     this.startCountdown(timeLimit, () => this.completeVoting());
   }
 
@@ -658,6 +739,7 @@ class TableLaughsGame {
     });
 
     this.drawPreviews();
+    this.drawNamePreviews();
     this.bindClick("continue-from-results", () => {
       const summary = this.applyRoundScores();
       if (isFinal) {
@@ -675,7 +757,8 @@ class TableLaughsGame {
       .map(
         (player, index) => `
           <li class="leader-row" style="--player-color:${player.color}">
-            <span>${index + 1}. ${escapeHtml(player.displayName)}</span>
+            <span class="leader-rank">${index + 1}.</span>
+            <div class="leader-name">${this.renderPlayerName(player, "leader")}</div>
             <strong>${player.score}</strong>
           </li>
         `,
@@ -703,6 +786,7 @@ class TableLaughsGame {
       this.currentRound += 1;
       this.runRound();
     });
+    this.drawNamePreviews();
   }
 
   private showWinner(): void {
@@ -713,7 +797,8 @@ class TableLaughsGame {
       .map(
         (player, index) => `
           <li class="leader-row" style="--player-color:${player.color}">
-            <span>${index + 1}. ${escapeHtml(player.displayName)}</span>
+            <span class="leader-rank">${index + 1}.</span>
+            <div class="leader-name">${this.renderPlayerName(player, "leader")}</div>
             <strong>${player.score}</strong>
           </li>
         `,
@@ -726,7 +811,7 @@ class TableLaughsGame {
         <section class="center-card winner-card" style="--winner-color:${winner.color}">
           ${confettiMarkup()}
           <p class="eyebrow">Table Laughs Champion</p>
-          <h2>${escapeHtml(winner.displayName)}</h2>
+          <div class="winner-name">${this.renderPlayerName(winner, "winner")}</div>
           <ol class="leaderboard">${rows}</ol>
           <button class="primary-command" id="play-again" type="button">Play Again</button>
         </section>
@@ -735,6 +820,7 @@ class TableLaughsGame {
     });
 
     this.bindClick("play-again", () => this.beginJoin());
+    this.drawNamePreviews();
     void this.saveSnapshot();
   }
 
@@ -782,19 +868,36 @@ class TableLaughsGame {
       return this.renderSeatPanel(
         seatIndex,
         "join-player",
-        `
-          <span class="seat-label">Seat ${seatIndex + 1}</span>
-          <input id="player-name-${player.id}" class="name-input" value="${escapeAttribute(
-            player.displayName,
-          )}" maxlength="16" aria-label="Player name" />
-          <div class="seat-actions">
-            <button id="color-${player.id}" type="button">Color</button>
-            <button id="leave-${player.id}" type="button">Leave</button>
-          </div>
-        `,
+        this.renderJoinPlayerContents(player),
         player,
       );
     }).join("");
+  }
+
+  private renderJoinPlayerContents(player: PlayerData): string {
+    if (this.needsGuestNameInk(player)) {
+      return `
+        <div class="name-writer">
+          <span class="seat-label">Seat ${player.seatIndex + 1} - Guest</span>
+          <p>Write your name</p>
+          <canvas class="name-ink-pad" id="name-ink-${player.id}" width="360" height="96"></canvas>
+          <div class="seat-actions three">
+            <button id="name-clear-${player.id}" type="button" disabled>Clear</button>
+            <button id="name-skip-${player.id}" type="button">Skip</button>
+            <button id="name-done-${player.id}" type="button" disabled>Done</button>
+          </div>
+        </div>
+      `;
+    }
+
+    return `
+      <span class="seat-label">Seat ${player.seatIndex + 1} - ${this.playerKindLabel(player)}</span>
+      <div class="join-name">${this.renderPlayerName(player, "standard")}</div>
+      <div class="seat-actions">
+        <button id="color-${player.id}" type="button">Color</button>
+        <button id="leave-${player.id}" type="button">Leave</button>
+      </div>
+    `;
   }
 
   private renderPromptSeats(): string {
@@ -808,7 +911,7 @@ class TableLaughsGame {
         const body = slot.submitted
           ? this.renderSubmittedSeat(slot)
           : `
-            <h3>${escapeHtml(player.displayName)}</h3>
+            <div class="seat-player-name">${this.renderPlayerName(player, "compact")}</div>
             <p class="seat-prompt">${escapeHtml(slot.prompt.text)}</p>
             <canvas class="ink-pad" id="ink-${player.id}" width="420" height="128"></canvas>
             <div class="seat-actions three">
@@ -830,7 +933,7 @@ class TableLaughsGame {
   private renderSubmittedSeat(slot: AnswerSlot): string {
     const player = this.getPlayer(slot.playerId);
     return `
-      <h3>${escapeHtml(player?.displayName || "Player")}</h3>
+      <div class="seat-player-name">${this.renderPlayerName(player, "compact")}</div>
       <span class="submitted-badge">Submitted</span>
       <div class="seat-answer-hidden">Answer hidden</div>
     `;
@@ -856,7 +959,7 @@ class TableLaughsGame {
           player.seatIndex,
           "vote-seat",
           `
-            <h3>${escapeHtml(player.displayName)}</h3>
+            <div class="seat-player-name">${this.renderPlayerName(player, "compact")}</div>
             <span class="vote-status">Vote</span>
             <div class="vote-buttons">${choices}</div>
           `,
@@ -873,7 +976,7 @@ class TableLaughsGame {
           player.seatIndex,
           "score-seat",
           `
-            <h3>${escapeHtml(player.displayName)}</h3>
+            <div class="seat-player-name">${this.renderPlayerName(player, "compact")}</div>
             <strong>${player.score}</strong>
           `,
           player,
@@ -911,7 +1014,7 @@ class TableLaughsGame {
     return `
       <article class="result-row" style="--player-color:${player?.color || "#f5ba3d"}">
         <span class="result-rank">${index + 1}</span>
-        <strong>${escapeHtml(player?.displayName || "Player")}</strong>
+        <div class="result-name">${this.renderPlayerName(player, "compact")}</div>
         ${this.renderAnswerPreview(slot, "result-preview")}
         <span>${slot.votes} vote${slot.votes === 1 ? "" : "s"}</span>
       </article>
@@ -929,6 +1032,22 @@ class TableLaughsGame {
     return `<div class="${className} text-preview">${escapeHtml(slot.answer.text || "Handwritten answer")}</div>`;
   }
 
+  private renderPlayerName(player: PlayerData | undefined, size: "compact" | "standard" | "leader" | "winner"): string {
+    if (!player) {
+      return `<span class="player-name player-name-${size} player-name-text">Player</span>`;
+    }
+
+    if (player.nameInk && answerHasInk(player.nameInk)) {
+      return `<canvas class="player-name player-name-${size} player-name-ink" width="360" height="96" data-name-player-id="${
+        player.id
+      }" aria-label="${escapeAttribute(this.playerLabelText(player))}"></canvas>`;
+    }
+
+    return `<span class="player-name player-name-${size} player-name-text">${escapeHtml(
+      this.playerLabelText(player),
+    )}</span>`;
+  }
+
   private renderTimer(seconds: number): string {
     return `<span class="timer"><span id="countdown">${Math.ceil(seconds)}</span></span>`;
   }
@@ -939,6 +1058,16 @@ class TableLaughsGame {
       const slot = this.currentAnswers.find((answer) => answer.playerId === playerId);
       if (slot) {
         drawInkPreview(canvas, slot.answer);
+      }
+    });
+  }
+
+  private drawNamePreviews(): void {
+    this.root.querySelectorAll<HTMLCanvasElement>("canvas[data-name-player-id]").forEach((canvas) => {
+      const playerId = Number(canvas.dataset.namePlayerId);
+      const player = this.getPlayer(playerId);
+      if (player?.nameInk) {
+        drawInkPreview(canvas, player.nameInk);
       }
     });
   }
@@ -983,9 +1112,10 @@ class TableLaughsGame {
     }
 
     const id = this.nextPlayerId;
+    const boardSessionId = Board.isOnDevice ? this.nextGuestSessionId() : id;
     if (Board.isOnDevice) {
       try {
-        Board.session.addGuest(id);
+        Board.session.addGuest(boardSessionId);
       } catch (error) {
         console.warn("Could not add Board guest.", error);
       }
@@ -997,7 +1127,9 @@ class TableLaughsGame {
       displayName: `Player ${id}`,
       color: PLAYER_COLORS[(id - 1) % PLAYER_COLORS.length],
       score: 0,
-      boardSessionId: id,
+      boardSessionId,
+      boardPlayerType: "guest",
+      nameInkConfirmed: false,
     });
     this.nextPlayerId += 1;
   }
@@ -1014,6 +1146,8 @@ class TableLaughsGame {
 
     const index = this.players.findIndex((candidate) => candidate.id === playerId);
     if (index >= 0) {
+      this.nameInkPads.get(playerId)?.dispose();
+      this.nameInkPads.delete(playerId);
       this.players.splice(index, 1);
     }
   }
@@ -1021,6 +1155,30 @@ class TableLaughsGame {
   private cyclePlayerColor(player: PlayerData): void {
     const currentIndex = PLAYER_COLORS.indexOf(player.color);
     player.color = PLAYER_COLORS[(currentIndex + 1) % PLAYER_COLORS.length];
+  }
+
+  private needsGuestNameInk(player: PlayerData): boolean {
+    return !this.isBoardProfile(player) && player.nameInkConfirmed !== true;
+  }
+
+  private isBoardProfile(player: PlayerData): boolean {
+    return String(player.boardPlayerType) === "profile";
+  }
+
+  private playerKindLabel(player: PlayerData): string {
+    return this.isBoardProfile(player) ? "Profile" : "Guest";
+  }
+
+  private playerLabelText(player: PlayerData): string {
+    return cleanName(player.displayName, player.id);
+  }
+
+  private nameFromBoardPlayer(boardPlayer: BoardPlayer, fallbackId: number): string {
+    if (String(boardPlayer.type) !== "profile") {
+      return `Player ${fallbackId}`;
+    }
+
+    return cleanName(boardPlayer.name, fallbackId);
   }
 
   private playerAtSeat(seatIndex: number): PlayerData | undefined {
@@ -1039,6 +1197,15 @@ class TableLaughsGame {
     }
 
     return -1;
+  }
+
+  private nextGuestSessionId(): number {
+    let sessionId = this.nextPlayerId;
+    while (this.players.some((player) => player.boardSessionId === sessionId)) {
+      sessionId += 1;
+    }
+
+    return sessionId;
   }
 
   private resetPromptBags(): void {
@@ -1101,10 +1268,11 @@ class TableLaughsGame {
 
       player.score += points;
       if (points > 0) {
+        const playerName = this.playerLabelText(player);
         summary.lines.push(
           earnedSweep
-            ? `${player.displayName}: +${points} including a table sweep bonus`
-            : `${player.displayName}: +${points}`,
+            ? `${playerName}: +${points} including a table sweep bonus`
+            : `${playerName}: +${points}`,
         );
       }
     }
@@ -1148,6 +1316,12 @@ class TableLaughsGame {
   private clearInputState(): void {
     this.inkPads.forEach((pad) => pad.dispose());
     this.inkPads.clear();
+    this.clearNameInputState();
+  }
+
+  private clearNameInputState(): void {
+    this.nameInkPads.forEach((pad) => pad.dispose());
+    this.nameInkPads.clear();
   }
 
   private bindClick(id: string, handler: () => void): void {

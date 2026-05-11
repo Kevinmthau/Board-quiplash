@@ -189,8 +189,8 @@ button:disabled {
 }
 
 .join-player {
-  --seat-side-depth-half: 78px;
-  min-height: 156px;
+  --seat-side-depth-half: 95px;
+  min-height: 190px;
 }
 
 .prompt-seat {
@@ -207,6 +207,75 @@ button:disabled {
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.seat-player-name,
+.join-name,
+.result-name,
+.leader-name,
+.winner-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.player-name {
+  display: block;
+  max-width: 100%;
+}
+
+.player-name-text {
+  overflow: hidden;
+  color: #fffdf4;
+  font-weight: 900;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-name-standard.player-name-text {
+  font-size: 20px;
+}
+
+.player-name-compact.player-name-text {
+  font-size: 17px;
+}
+
+.player-name-leader.player-name-text {
+  font-size: 21px;
+}
+
+.player-name-winner.player-name-text {
+  color: var(--winner-color);
+  font-size: clamp(48px, 5.5vw, 82px);
+  line-height: 1.02;
+}
+
+.player-name-ink {
+  border: 1px solid rgba(32, 39, 38, 0.28);
+  border-radius: 8px;
+  background: #fbf4dc;
+}
+
+.player-name-standard.player-name-ink {
+  width: 100%;
+  height: 52px;
+}
+
+.player-name-compact.player-name-ink {
+  width: 180px;
+  height: 36px;
+}
+
+.player-name-leader.player-name-ink {
+  width: min(260px, 100%);
+  height: 42px;
+}
+
+.player-name-winner.player-name-ink {
+  width: min(560px, 100%);
+  height: 118px;
 }
 
 .seat-panel strong {
@@ -258,15 +327,16 @@ button:disabled {
   font-size: 26px;
 }
 
-.name-input {
-  width: 100%;
-  height: 46px;
-  border: 1px solid rgba(251, 244, 220, 0.3);
-  border-radius: 8px;
-  background: rgba(251, 244, 220, 0.95);
-  color: #202726;
-  font-size: 20px;
-  font-weight: 800;
+.name-writer {
+  display: grid;
+  gap: 7px;
+}
+
+.name-writer p {
+  margin: 0;
+  color: #fffdf4;
+  font-size: 16px;
+  font-weight: 900;
   text-align: center;
 }
 
@@ -429,7 +499,8 @@ h2 {
 }
 
 .ink-pad,
-.ink-preview {
+.ink-preview,
+.name-ink-pad {
   display: block;
   width: 100%;
   border: 1px solid rgba(32, 39, 38, 0.28);
@@ -440,6 +511,10 @@ h2 {
 
 .ink-pad {
   height: 76px;
+}
+
+.name-ink-pad {
+  height: 54px;
 }
 
 .seat-preview {
@@ -591,8 +666,9 @@ h2 {
   text-align: left;
 }
 
-.result-row strong,
+.result-name,
 .result-row span:last-child {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -607,10 +683,10 @@ h2 {
 }
 
 .leader-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) max-content;
   min-height: 54px;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
   padding: 0 18px;
   border: 1px solid color-mix(in srgb, var(--player-color), white 16%);
@@ -620,7 +696,11 @@ h2 {
   font-weight: 900;
 }
 
-.leader-row span {
+.leader-rank {
+  color: rgba(255, 249, 233, 0.72);
+}
+
+.leader-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -642,10 +722,12 @@ h2 {
   border-color: color-mix(in srgb, var(--winner-color), white 35%);
 }
 
-.winner-card h2 {
+.winner-name {
   margin-bottom: 20px;
+}
+
+.winner-name .player-name-text {
   color: var(--winner-color);
-  font-size: clamp(48px, 5.5vw, 82px);
 }
 
 .confetti {
@@ -699,8 +781,8 @@ h2 {
   }
 
   .join-player {
-    --seat-side-depth-half: 74px;
-    min-height: 148px;
+    --seat-side-depth-half: 88px;
+    min-height: 176px;
   }
 
   .prompt-seat {
@@ -728,6 +810,19 @@ h2 {
 
   .ink-pad {
     height: 64px;
+  }
+
+  .name-ink-pad {
+    height: 48px;
+  }
+
+  .player-name-standard.player-name-ink {
+    height: 46px;
+  }
+
+  .player-name-compact.player-name-ink {
+    width: 150px;
+    height: 32px;
   }
 
   .vote-stage {
