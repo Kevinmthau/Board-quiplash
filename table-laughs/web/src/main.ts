@@ -183,6 +183,7 @@ class TableLaughsGame {
   private nextPlayerId = 1;
   private countdownEl: HTMLElement | null = null;
   private timerId: number | null = null;
+  private profileSwitcherSyncTimerId: number | null = null;
   private timerEndsAt = 0;
   private saveId: string | null = null;
   private advancing = false;
@@ -409,11 +410,7 @@ class TableLaughsGame {
     this.bindClick("profile-switcher", () => {
       if (Board.isOnDevice) {
         Board.session.showProfileSwitcher();
-        window.setTimeout(() => {
-          if (this.phase === "join" && this.importBoardSessionPlayers()) {
-            this.showJoin();
-          }
-        }, 800);
+        this.startProfileSwitcherSync();
       }
     });
 
@@ -450,6 +447,31 @@ class TableLaughsGame {
       this.showJoin();
     } catch (error) {
       console.warn("Add Board player failed.", error);
+    }
+  }
+
+  private startProfileSwitcherSync(): void {
+    this.stopProfileSwitcherSync();
+
+    const syncPlayers = (): void => {
+      if (this.phase !== "join") {
+        this.stopProfileSwitcherSync();
+        return;
+      }
+
+      if (this.importBoardSessionPlayers()) {
+        this.showJoin();
+      }
+    };
+
+    syncPlayers();
+    this.profileSwitcherSyncTimerId = window.setInterval(syncPlayers, 500);
+  }
+
+  private stopProfileSwitcherSync(): void {
+    if (this.profileSwitcherSyncTimerId !== null) {
+      window.clearInterval(this.profileSwitcherSyncTimerId);
+      this.profileSwitcherSyncTimerId = null;
     }
   }
 
