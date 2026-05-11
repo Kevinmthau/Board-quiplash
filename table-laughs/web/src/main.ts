@@ -1250,9 +1250,10 @@ class InkPad {
   };
 
   private pointFromEvent(event: PointerEvent): InkPoint {
-    const rect = this.canvas.getBoundingClientRect();
-    const x = rect.width === 0 ? 0 : (event.clientX - rect.left) / rect.width;
-    const y = rect.height === 0 ? 0 : (event.clientY - rect.top) / rect.height;
+    const width = this.canvas.clientWidth || this.canvas.width;
+    const height = this.canvas.clientHeight || this.canvas.height;
+    const x = width === 0 ? 0 : event.offsetX / width;
+    const y = height === 0 ? 0 : event.offsetY / height;
     return {
       x: clamp(x, 0, 1),
       y: clamp(y, 0, 1),
@@ -1260,9 +1261,7 @@ class InkPad {
   }
 
   private resize(): void {
-    const rect = this.canvas.getBoundingClientRect();
-    const width = Math.max(1, Math.round(rect.width * window.devicePixelRatio));
-    const height = Math.max(1, Math.round(rect.height * window.devicePixelRatio));
+    const { width, height } = canvasPixelSize(this.canvas);
     if (this.canvas.width !== width || this.canvas.height !== height) {
       this.canvas.width = width;
       this.canvas.height = height;
@@ -1281,9 +1280,7 @@ function drawInkPreview(canvas: HTMLCanvasElement, answer: HandwritingAnswer): v
     return;
   }
 
-  const rect = canvas.getBoundingClientRect();
-  const width = Math.max(1, Math.round((rect.width || canvas.width) * window.devicePixelRatio));
-  const height = Math.max(1, Math.round((rect.height || canvas.height) * window.devicePixelRatio));
+  const { width, height } = canvasPixelSize(canvas);
   if (canvas.width !== width || canvas.height !== height) {
     canvas.width = width;
     canvas.height = height;
@@ -1394,6 +1391,15 @@ function confettiMarkup(): string {
       ).join("")}
     </div>
   `;
+}
+
+function canvasPixelSize(canvas: HTMLCanvasElement): { width: number; height: number } {
+  const width = canvas.clientWidth || canvas.width;
+  const height = canvas.clientHeight || canvas.height;
+  return {
+    width: Math.max(1, Math.round(width * window.devicePixelRatio)),
+    height: Math.max(1, Math.round(height * window.devicePixelRatio)),
+  };
 }
 
 function answerHasInk(answer: HandwritingAnswer): boolean {

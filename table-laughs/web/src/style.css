@@ -134,6 +134,7 @@ button:disabled {
 
 .seat-panel {
   --player-color: #f8d96e;
+  --seat-side-depth-half: 69px;
   position: absolute;
   display: flex;
   width: clamp(250px, 22vw, 380px);
@@ -150,6 +151,7 @@ button:disabled {
   box-shadow: 0 16px 32px rgba(0, 0, 0, 0.22);
   color: #fff9e9;
   pointer-events: auto;
+  transform-origin: center;
 }
 
 .seat-0 {
@@ -165,23 +167,35 @@ button:disabled {
 .seat-2 {
   top: 50%;
   right: 24px;
-  transform: translateY(-50%);
+  transform: translateX(calc(50% - var(--seat-side-depth-half))) translateY(-50%) rotate(-90deg);
 }
 
 .seat-3 {
   top: 24px;
   right: 12%;
+  transform: rotate(180deg);
 }
 
 .seat-4 {
   top: 24px;
   left: 12%;
+  transform: rotate(180deg);
 }
 
 .seat-5 {
   top: 50%;
   left: 24px;
-  transform: translateY(-50%);
+  transform: translateX(calc(var(--seat-side-depth-half) - 50%)) translateY(-50%) rotate(90deg);
+}
+
+.join-player {
+  --seat-side-depth-half: 78px;
+  min-height: 156px;
+}
+
+.prompt-seat {
+  --seat-side-depth-half: 103px;
+  min-height: 206px;
 }
 
 .seat-panel h3 {
@@ -656,9 +670,20 @@ h2 {
   }
 
   .seat-panel {
+    --seat-side-depth-half: 61px;
     width: 228px;
     min-height: 122px;
     padding: 10px;
+  }
+
+  .join-player {
+    --seat-side-depth-half: 74px;
+    min-height: 148px;
+  }
+
+  .prompt-seat {
+    --seat-side-depth-half: 93px;
+    min-height: 186px;
   }
 
   .seat-0,
