@@ -832,7 +832,7 @@ class TableLaughsGame {
     return `
       <h3>${escapeHtml(player?.displayName || "Player")}</h3>
       <span class="submitted-badge">Submitted</span>
-      ${this.renderAnswerPreview(slot, "seat-preview")}
+      <div class="seat-answer-hidden">Answer hidden</div>
     `;
   }
 
