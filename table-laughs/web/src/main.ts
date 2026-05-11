@@ -13,6 +13,8 @@ const PROMPT_SECONDS = 75;
 const ROUND_VOTE_SECONDS = 35;
 const FINAL_VOTE_SECONDS = 40;
 const GAME_VERSION = "0.1.0-web";
+const BOARD_PLAYER_SYNC_TIMEOUT_MS = 3000;
+const BOARD_PLAYER_SELECTED_RESULT = "selected";
 
 const PLAYER_COLORS = [
   "#f35f6f",
@@ -27,6 +29,7 @@ const PLAYER_COLORS = [
 
 type GamePhase = "title" | "join" | "prompt" | "vote" | "results" | "scoreboard" | "winner";
 type PlayerKind = BoardPlayer["type"] | "profile" | "guest";
+type BoardPlayerSelectorResult = string[] | null;
 
 interface PromptEntry {
   id: string;
@@ -447,17 +450,64 @@ class TableLaughsGame {
     try {
       const previousActiveProfileId = this.readActiveBoardProfile()?.playerId;
       const previousBoardPlayerKeys = this.boardSessionPlayerKeys();
-      await Board.session.presentAddPlayer();
+      const selectedBoardPlayer = await this.presentBoardAddPlayer();
 
       if (this.importSelectedBoardPlayer(seatIndex, previousActiveProfileId, previousBoardPlayerKeys)) {
         this.showJoin();
         return;
       }
 
-      this.startProfileSwitcherSync(seatIndex, previousActiveProfileId, previousBoardPlayerKeys);
+      if (selectedBoardPlayer) {
+        this.startProfileSwitcherSync(seatIndex, previousActiveProfileId, previousBoardPlayerKeys);
+      }
     } catch (error) {
       console.warn("Add Board player failed.", error);
     }
+  }
+
+  private async presentBoardAddPlayer(): Promise<boolean> {
+    const bridge = window.BoardSDK;
+    if (!bridge) {
+      return false;
+    }
+
+    this.initBoardAsyncBridge();
+    const requestId = bridge.presentAddPlayerSelector();
+
+    return new Promise((resolve, reject) => {
+      window.__board?._pending.set(requestId, {
+        resolve: (result: BoardPlayerSelectorResult) => {
+          resolve(result?.includes(BOARD_PLAYER_SELECTED_RESULT) === true);
+        },
+        reject,
+      });
+    });
+  }
+
+  private initBoardAsyncBridge(): void {
+    if (window.__board) {
+      return;
+    }
+
+    window.__board = {
+      _pending: new Map(),
+      resolve(id: number, result: string): void {
+        const pending = this._pending.get(id);
+        if (!pending) {
+          return;
+        }
+        this._pending.delete(id);
+        pending.resolve(JSON.parse(result));
+      },
+      reject(id: number, error: string): void {
+        const pending = this._pending.get(id);
+        if (!pending) {
+          return;
+        }
+        this._pending.delete(id);
+        pending.reject(new Error(error));
+      },
+    };
   }
 
   private importSelectedBoardPlayer(
@@ -533,6 +583,7 @@ class TableLaughsGame {
     previousBoardPlayerKeys?: Set<string>,
   ): void {
     this.stopProfileSwitcherSync();
+    const expiresAt = Date.now() + BOARD_PLAYER_SYNC_TIMEOUT_MS;
 
     const syncPlayers = (): void => {
       if (this.phase !== "join") {
@@ -551,6 +602,11 @@ class TableLaughsGame {
         this.hideProfileSwitcher();
         this.stopProfileSwitcherSync();
         this.showJoin();
+        return;
+      }
+
+      if (Date.now() >= expiresAt) {
+        this.stopProfileSwitcherSync();
       }
     };
 
