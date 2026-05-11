@@ -55,10 +55,4 @@ The Android wrapper expects the built output at `table-laughs/web/dist` and copi
 
 Prompts are served by the web app from:
 
-`board-websdk/example/public/prompts/table_laughs_prompts.json`
-
-The original Unity prompt pack remains at `Assets/Resources/Prompts/table_laughs_prompts.json` for reference.
-
-## Legacy Unity Project
-
-The Unity implementation is still present in `Assets/`, `Packages/`, and `ProjectSettings/`, but the active version is the Board Web SDK app under `board-websdk/example`.
+`table-laughs/web/public/prompts/table_laughs_prompts.json`

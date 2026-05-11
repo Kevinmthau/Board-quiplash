@@ -48,7 +48,7 @@ public class BoardWebViewActivity extends Activity {
         // Load touch model and activate detection
         if (RawDataGlyphDetector.loadModel("model.tflite")) {
             Log.i(TAG, "Model loaded, activating touch detection...");
-            // Match ArcadeAlt Unity settings
+            // Match ArcadeAlt touch detection settings
             TrackerParameters params = new TrackerParameters(
                     0.035f,  // positionSmoothing
                     0.004f,  // rotationSmoothing

@@ -1,6 +1,6 @@
 # Table Laughs - Board Web
 
-This is the Board Web SDK version of Table Laughs. It replaces the Unity runtime with a Vite + TypeScript web game that runs in a normal browser for layout work and inside the Table Laughs Android WebView wrapper for Board SDK APIs.
+This is the Board Web SDK version of Table Laughs. It is a Vite + TypeScript web game that runs in a normal browser for layout work and inside the Table Laughs Android WebView wrapper for Board SDK APIs.
 
 ## Run Locally
 
@@ -40,4 +40,4 @@ The Android wrapper copies `web/dist` into the APK. Java 17+ is required for thi
 - `Board.pause.setContext` configures restart, save-and-quit, and audio sliders.
 - `Board.save` writes a compact game snapshot on winner and save-and-quit.
 
-Prompts are served from `public/prompts/table_laughs_prompts.json`, copied from the original Unity prompt pack.
+Prompts are served from `public/prompts/table_laughs_prompts.json`.
