@@ -2,10 +2,20 @@
 
 Table Laughs is now implemented as a Board Web SDK local party game for 3 to 6 players. Players join from seats around the table, draw answers on per-seat paper panels, vote from their own seat controls, and play through three rounds with sweep bonuses and a final winner screen.
 
+## Project Layout
+
+The active Board version now lives under `table-laughs/`:
+
+- `table-laughs/web/` contains the Vite + TypeScript game.
+- `table-laughs/android/` contains the Android wrapper that installs as its own app: `com.tablelaughs.board`.
+- `table-laughs/vendor/` contains the Board Web SDK npm tarball used by this game.
+
+`board-websdk/` remains as the vendor SDK bundle and generic sample harness. It should not be used as the app identity for Table Laughs.
+
 ## Run The Board Web Version
 
 ```bash
-cd board-websdk/example
+cd table-laughs/web
 npm install
 npm run dev
 ```
@@ -15,13 +25,13 @@ The browser preview is playable for layout and game-loop work. Board APIs are gu
 ## Build For Board Or Harness
 
 ```bash
-cd board-websdk/example
+cd table-laughs/web
 npm run build
-cd ../sample
+cd ../android
 ./gradlew assembleDebug
 ```
 
-The harness expects the built output at `board-websdk/example/dist` and copies it into the APK assets. Java 17+ is required for the Android harness build.
+The Android wrapper expects the built output at `table-laughs/web/dist` and copies it into the APK assets. Java 17+ is required for the Android build.
 
 ## Game Loop
 

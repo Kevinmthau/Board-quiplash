@@ -11,6 +11,11 @@ MemoryCaptures/
 # Local build and simulator output
 build/
 .utmp/
+table-laughs/web/dist/
+table-laughs/web/node_modules/
+table-laughs/android/.gradle/
+table-laughs/android/app/build/
+table-laughs/android/app/src/main/assets/game/
 
 # IDE and generated project files
 .vs/

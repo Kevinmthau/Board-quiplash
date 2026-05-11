@@ -1,0 +1,19 @@
+{
+  "name": "table-laughs-board-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Table Laughs rewritten as a Board Web SDK game.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@harrishill/board-sdk": "file:../vendor/harrishill-board-sdk-0.1.0.tgz"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vite": "^5.4.0"
+  }
+}
